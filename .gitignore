@@ -1,0 +1,22 @@
+# Dépendances
+node_modules/
+
+# Fichiers générés
+web/public/live/
+web/public/videos/*.m3u8
+web/public/videos/*.ts
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Docker volumes data
+data/

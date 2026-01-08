@@ -1,0 +1,93 @@
+<!doctype html>
+<!--
+  ROLE — Landing page
+
+  Simple entrypoint that links to the 3 web UIs:
+  - Admin
+  - Subtitler
+  - Spectator
+-->
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sous-Titrage en Direct</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #111; 
+      color: #fff; 
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    
+    .container {
+      max-width: 400px;
+      width: 100%;
+    }
+    
+    .title {
+      text-align: center;
+      margin-bottom: 32px;
+      color: #888;
+      font-size: 0.9em;
+      font-weight: 400;
+    }
+    
+    .nav-cards {
+      display: grid;
+      gap: 12px;
+    }
+    
+    .nav-card {
+      display: block;
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 20px 24px;
+      text-decoration: none;
+      color: inherit;
+      transition: all 0.15s;
+    }
+    .nav-card:hover {
+      border-color: #3a3a3a;
+      background: #1f1f1f;
+    }
+    
+    .nav-card h3 {
+      margin: 0 0 4px;
+      font-size: 1em;
+      font-weight: 500;
+    }
+    .nav-card p {
+      color: #666;
+      font-size: 0.85em;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="title">Sous-Titrage en Direct</div>
+    
+    <div class="nav-cards">
+      <a class="nav-card" href="/admin.html">
+        <h3>Administration</h3>
+        <p>Gérer le live</p>
+      </a>
+      <a class="nav-card" href="/subtitler.html">
+        <h3>Sous-titreur</h3>
+        <p>Créer des sous-titres</p>
+      </a>
+      <a class="nav-card" href="/spectator.html">
+        <h3>Spectateur</h3>
+        <p>Regarder le live</p>
+      </a>
+    </div>
+  </div>
+</body>
+</html>

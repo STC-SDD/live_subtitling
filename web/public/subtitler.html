@@ -1,0 +1,415 @@
+<!doctype html>
+<!--
+  ROLE — Subtitler page
+
+  UI used by human subtitlers to:
+  - join the session with a name
+  - watch the LIVE HLS stream
+  - type/send captions when it is their turn
+-->
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sous-titreur</title>
+  <script src="/vendor/hls.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a0a; 
+      color: #fff; 
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .header {
+      padding: 10px 16px;
+      background: #111;
+      border-bottom: 1px solid #222;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.9em;
+    }
+    
+    .header-title { color: #666; }
+    
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #666;
+    }
+    .status .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #333;
+    }
+    .status.live .dot {
+      background: #2ecc71;
+      animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    
+    .video-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #000;
+    }
+    
+    .video-container {
+      flex: 1;
+      position: relative;
+      background: #000;
+    }
+    
+    video {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    
+    .video-overlay {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.7);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 0.8em;
+      color: #888;
+    }
+    
+    .video-controls {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+    }
+    
+    .video-controls button {
+      padding: 6px 12px;
+      background: rgba(255,255,255,0.1);
+      border: none;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 0.85em;
+      cursor: pointer;
+    }
+    .video-controls button:hover { background: rgba(255,255,255,0.2); }
+    
+    .input-section {
+      width: 360px;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid #222;
+      background: #111;
+    }
+    
+    /* Turn indicator */
+    .turn-indicator {
+      padding: 14px;
+      text-align: center;
+      display: none;
+      border-bottom: 1px solid #222;
+    }
+    .turn-indicator.active { display: block; }
+    
+    .turn-indicator.your-turn {
+      background: rgba(46,204,113,0.1);
+      border-bottom-color: #2ecc71;
+    }
+    .turn-indicator.waiting {
+      background: rgba(100,100,100,0.1);
+    }
+    .turn-indicator.grace {
+      background: rgba(230,126,34,0.15);
+      border-bottom-color: #e67e22;
+    }
+    .turn-indicator.grace .turn-timer { color: #e67e22 !important; }
+    .turn-indicator.grace .turn-label { color: #e67e22; }
+    .turn-indicator.grace .fill { background: #e67e22; }
+    
+    .turn-label {
+      font-size: 0.8em;
+      color: #888;
+      margin-bottom: 4px;
+    }
+    .turn-timer {
+      font-size: 1.8em;
+      font-weight: 600;
+      color: #fff;
+    }
+    .turn-indicator.your-turn .turn-timer { color: #2ecc71; }
+    
+    .turn-current {
+      font-size: 0.85em;
+      color: #666;
+      margin-top: 6px;
+    }
+    
+    .turn-progress {
+      height: 3px;
+      background: #333;
+      margin-top: 10px;
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .turn-progress .fill {
+      height: 100%;
+      background: #2ecc71;
+      transition: width 0.3s;
+    }
+    
+    /* Caption input */
+    .caption-area {
+      padding: 16px;
+      border-bottom: 1px solid #222;
+    }
+    
+    .caption-area h3 {
+      font-size: 0.8em;
+      color: #555;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    
+    .caption-input {
+      width: 100%;
+      padding: 12px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 1em;
+      resize: none;
+      min-height: 80px;
+    }
+    .caption-input:focus {
+      outline: none;
+      border-color: #444;
+    }
+    
+    .caption-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+    }
+    
+    .char-count {
+      font-size: 0.8em;
+      color: #555;
+    }
+    
+    .send-btn {
+      padding: 8px 20px;
+      background: #2ecc71;
+      border: none;
+      border-radius: 4px;
+      color: #000;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .send-btn:hover { filter: brightness(0.9); }
+    .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    
+    /* History */
+    .history-section {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+    
+    .history-section h3 {
+      font-size: 0.8em;
+      color: #555;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    
+    .history-item {
+      padding: 10px;
+      background: #1a1a1a;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      font-size: 0.9em;
+    }
+    .history-item.mine {
+      border-left: 3px solid #2ecc71;
+    }
+    .history-item.other {
+      background: #151515;
+      border-left: 3px solid #3498db;
+    }
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .history-author {
+      font-size: 0.75em;
+      font-weight: 600;
+      color: #888;
+    }
+    .history-item.mine .history-author { color: #2ecc71; }
+    .history-item.other .history-author { color: #3498db; }
+    .history-time {
+      font-size: 0.7em;
+      color: #555;
+    }
+    .history-text {
+      line-height: 1.4;
+    }
+    
+    .no-history {
+      color: #444;
+      font-size: 0.85em;
+      text-align: center;
+      padding: 20px;
+    }
+    
+    /* Login overlay */
+    .login-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: #0a0a0a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .login-overlay.hidden { display: none; }
+    
+    .login-box {
+      background: #151515;
+      border: 1px solid #222;
+      border-radius: 8px;
+      padding: 32px;
+      width: 320px;
+      text-align: center;
+    }
+    
+    .login-box h2 {
+      font-size: 1.2em;
+      font-weight: 500;
+      margin-bottom: 20px;
+      color: #ccc;
+    }
+    
+    .login-box input {
+      width: 100%;
+      padding: 12px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 1em;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .login-box input:focus {
+      outline: none;
+      border-color: #444;
+    }
+    
+    .login-box button {
+      width: 100%;
+      padding: 12px;
+      background: #2ecc71;
+      border: none;
+      border-radius: 4px;
+      color: #000;
+      font-size: 1em;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .login-box button:hover { filter: brightness(0.9); }
+  </style>
+</head>
+<body>
+  <!-- Login -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <h2>Identification</h2>
+      <input type="text" id="nameInput" placeholder="Votre nom" maxlength="20" />
+      <button id="joinBtn">Rejoindre</button>
+    </div>
+  </div>
+
+  <div class="header">
+    <span class="header-title">Sous-titreur</span>
+    <div id="statusDisplay" class="status">
+      <span class="dot"></span>
+      <span class="text">Connexion...</span>
+    </div>
+  </div>
+  
+  <div class="main">
+    <div class="video-section">
+      <div class="video-container">
+        <video id="video" playsinline></video>
+        <div class="video-overlay" id="videoStatus">En attente du live</div>
+        <div class="video-controls">
+          <button id="muteBtn">Son</button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="input-section">
+      <div class="turn-indicator" id="turnIndicator">
+        <div class="turn-label" id="turnLabel">En attente</div>
+        <div class="turn-timer" id="turnTimer">--:--</div>
+        <div class="turn-current" id="turnCurrent"></div>
+        <div class="turn-progress">
+          <div class="fill" id="turnProgress" style="width:100%;"></div>
+        </div>
+      </div>
+      
+      <div class="caption-area">
+        <h3>Sous-titre</h3>
+        <textarea 
+          class="caption-input" 
+          id="captionInput" 
+          placeholder="Entrez le sous-titre..."
+          maxlength="200"
+        ></textarea>
+        <div class="caption-footer">
+          <span class="char-count" id="charCount">0/200</span>
+          <button class="send-btn" id="sendBtn">Envoyer</button>
+        </div>
+      </div>
+      
+      <div class="history-section">
+        <h3>Historique</h3>
+        <div id="historyList">
+          <p class="no-history">Aucun sous-titre</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/shared.js"></script>
+  <script src="/js/subtitler.js"></script>
+</body>
+</html>

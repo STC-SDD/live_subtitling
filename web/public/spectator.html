@@ -1,0 +1,184 @@
+<!doctype html>
+<!--
+  ROLE — Spectator page
+
+  Viewer UI used to:
+  - watch the DELAYED HLS stream
+  - receive and display captions over WebSocket (word-by-word)
+-->
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spectateur</title>
+  <script src="/vendor/hls.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      overflow: hidden;
+    }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #000; 
+      color: #fff;
+    }
+    
+    .video-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+    
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+    
+    /* Waiting screen */
+    .waiting-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: #0a0a0a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+    .waiting-screen.hidden { display: none; }
+    
+    .waiting-text {
+      color: #666;
+      font-size: 1.1em;
+    }
+    
+    .waiting-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #222;
+      border-top-color: #666;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    /* Caption display */
+    .caption-display {
+      position: fixed;
+      bottom: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+      max-width: 80%;
+      padding: 12px 24px;
+      background: rgba(0, 0, 0, 0.85);
+      border-radius: 4px;
+      font-size: 1.4em;
+      text-align: center;
+      line-height: 1.6;
+      z-index: 20;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .caption-display.visible { opacity: 1; }
+    
+    /* Ligne de sous-titre individuelle */
+    .caption-line {
+      margin: 4px 0;
+      animation: fadeIn 0.15s ease-out;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0.5; }
+      to { opacity: 1; }
+    }
+    
+    /* Controls bar */
+    .controls-bar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 12px 20px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.8));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 30;
+    }
+    .video-container:hover .controls-bar,
+    .controls-bar:hover { opacity: 1; }
+    
+    .controls-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .status-text {
+      font-size: 0.85em;
+      color: #888;
+    }
+    .status-text.live { color: #2ecc71; }
+    
+    .controls-right {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .ctrl-btn {
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.1);
+      border: none;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 0.85em;
+      cursor: pointer;
+    }
+    .ctrl-btn:hover { background: rgba(255,255,255,0.2); }
+
+    /* Fullscreen */
+    .video-container:fullscreen .controls-bar {
+      padding: 16px 24px;
+    }
+  </style>
+</head>
+<body>
+  <div class="video-container">
+    <video id="video" playsinline></video>
+    
+    <div class="waiting-screen" id="waitingScreen">
+      <div class="waiting-spinner"></div>
+      <div class="waiting-text" id="waitingText">En attente du live...</div>
+    </div>
+    
+    <div class="caption-display" id="captionDisplay"></div>
+    
+    <div class="controls-bar" id="controlsBar">
+      <div class="controls-left">
+        <span class="status-text" id="statusText">Connexion...</span>
+      </div>
+      <div class="controls-right">
+        <button class="ctrl-btn" id="muteBtn">Son</button>
+        <button class="ctrl-btn" id="fullscreenBtn">Plein écran</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/shared.js"></script>
+  <script src="/js/spectator.js"></script>
+</body>
+</html>

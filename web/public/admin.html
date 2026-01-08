@@ -1,0 +1,353 @@
+<!doctype html>
+<!--
+  ROLE — Admin page
+
+  UI used to:
+  - upload/select a source video
+  - configure delay + fragment mode parameters
+  - start/stop the live
+  - monitor connected subtitlers and current turn
+-->
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Administration</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #111; 
+      color: #fff; 
+      min-height: 100vh;
+      padding: 24px;
+    }
+    
+    .container { max-width: 600px; margin: 0 auto; }
+    
+    h1 { 
+      font-size: 1.3em; 
+      margin-bottom: 24px;
+      font-weight: 500;
+      color: #888;
+    }
+    
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    
+    .card-title {
+      font-size: 0.8em;
+      margin-bottom: 14px;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 0.85em;
+      font-weight: 500;
+    }
+    .status-badge.offline { background: #252525; color: #666; }
+    .status-badge.live { background: #2ecc71; color: #000; }
+    
+    .status-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .status-badge.live .dot { animation: pulse 1s infinite; }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    
+    .stats {
+      display: flex;
+      gap: 32px;
+    }
+    .stat-value {
+      font-size: 1.4em;
+      font-weight: 600;
+      color: #fff;
+    }
+    .stat-label {
+      font-size: 0.7em;
+      color: #555;
+      margin-top: 2px;
+    }
+    
+    .form-group {
+      margin-bottom: 12px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 4px;
+      color: #666;
+      font-size: 0.8em;
+    }
+    .form-group select,
+    .form-group input {
+      width: 100%;
+      padding: 10px 12px;
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 0.9em;
+    }
+    .form-group select:focus,
+    .form-group input:focus {
+      outline: none;
+      border-color: #444;
+    }
+    
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      font-size: 0.9em;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn:hover:not(:disabled) { filter: brightness(0.9); }
+    
+    .btn-start { background: #2ecc71; color: #000; }
+    .btn-stop { background: #e74c3c; color: #fff; }
+    
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    
+    .subtitler-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .subtitler-chip {
+      padding: 4px 10px;
+      background: #252525;
+      border-radius: 4px;
+      font-size: 0.8em;
+      color: #888;
+    }
+    .subtitler-chip.active {
+      background: #2ecc71;
+      color: #000;
+    }
+    
+    .turn-display {
+      padding: 16px;
+      background: #222;
+      border-radius: 4px;
+      text-align: center;
+      margin-top: 12px;
+    }
+    .turn-display .name {
+      font-size: 1em;
+      color: #fff;
+    }
+    .turn-display .timer {
+      font-size: 1.6em;
+      font-weight: 600;
+      color: #2ecc71;
+      margin-top: 4px;
+    }
+    .turn-display .progress {
+      height: 3px;
+      background: #333;
+      border-radius: 2px;
+      margin-top: 12px;
+      overflow: hidden;
+    }
+    .turn-display .progress .fill {
+      height: 100%;
+      background: #2ecc71;
+      transition: width 0.3s;
+    }
+    
+    .upload-area {
+      border: 1px dashed #333;
+      border-radius: 4px;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      color: #555;
+      font-size: 0.85em;
+    }
+    .upload-area:hover { border-color: #444; color: #777; }
+    .upload-area input { display: none; }
+    
+    .message {
+      padding: 10px 12px;
+      border-radius: 4px;
+      margin-top: 12px;
+      font-size: 0.85em;
+    }
+    .message.success { background: rgba(46,204,113,0.1); color: #2ecc71; }
+    .message.error { background: rgba(231,76,60,0.1); color: #e74c3c; }
+    
+    .links {
+      display: flex;
+      gap: 10px;
+    }
+    .links a {
+      padding: 8px 14px;
+      background: #222;
+      border-radius: 4px;
+      color: #888;
+      text-decoration: none;
+      font-size: 0.85em;
+    }
+    .links a:hover { background: #282828; color: #aaa; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Administration</h1>
+    
+    <div class="card">
+      <div class="card-title">État du live</div>
+      <div class="status-row">
+        <div id="liveStatus" class="status-badge offline">
+          <span class="dot"></span>
+          <span class="text">Hors ligne</span>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-value" id="segmentCount">0</div>
+          <div class="stat-label">Segments</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="duration">00:00</div>
+          <div class="stat-label">Durée</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="delay">20s</div>
+          <div class="stat-label">Délai</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-title">Contrôles</div>
+      
+      <div class="form-group">
+        <label>Vidéo source</label>
+        <select id="videoSelect">
+          <option value="">Sélectionner une vidéo</option>
+        </select>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label>Nombre sous-titreurs</label>
+          <input type="number" id="requiredSubtitlers" value="2" min="1" max="10" />
+        </div>
+        <div class="form-group">
+          <label>Délai spectateur (s)</label>
+          <input type="number" id="delayInput" value="20" min="5" max="120" />
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label>Durée slot (s)</label>
+          <input type="number" id="slotDuration" value="30" min="10" max="120" />
+        </div>
+        <div class="form-group">
+          <label>Chevauchement (s)</label>
+          <input type="number" id="overlapDuration" value="5" min="0" max="30" />
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label>Temps bonus (%)</label>
+          <input type="number" id="gracePeriod" value="20" min="0" max="100" />
+        </div>
+        <div class="form-group">
+          <!-- Empty for alignment -->
+        </div>
+      </div>
+
+      <div id="restInfo" style="margin-top:4px;color:#666;font-size:0.85em;line-height:1.4;">
+        <div><span style="color:#888;">Repos estimé</span> : <span id="restingTime">-</span></div>
+        <div><span style="color:#888;">Cycle</span> : <span id="cycleTime">-</span> <span style="color:#888;">Stride</span> : <span id="strideTime">-</span> <span style="color:#888;">Min sous-titreurs</span> : <span id="minSubtitlers">-</span></div>
+      </div>
+      
+      <div class="btn-group">
+        <button id="startBtn" class="btn btn-start">Démarrer</button>
+        <button id="stopBtn" class="btn btn-stop" disabled>Arrêter</button>
+      </div>
+      
+      <div id="controlMessage"></div>
+    </div>
+    
+    <div class="card">
+      <div class="card-title">Sous-titreurs (<span id="subtitlerCount">0</span>)</div>
+      <div class="subtitler-list" id="subtitlerList">
+        <span style="color:#444;font-size:0.85em;">Aucun connecté</span>
+      </div>
+      
+      <div id="currentTurnSection" style="display:none;">
+        <div class="turn-display">
+          <div class="name" id="currentTurnName">-</div>
+          <div class="timer" id="currentTurnTimer">00:00</div>
+          <div class="progress">
+            <div class="fill" id="progressFill" style="width:100%;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-title">Ajouter une vidéo</div>
+      <div class="upload-area" id="uploadArea">
+        <input type="file" id="fileInput" accept="video/*" />
+        <div>Cliquer pour sélectionner</div>
+      </div>
+      <div id="uploadMessage"></div>
+    </div>
+    
+    <div class="card">
+      <div class="card-title">Liens</div>
+      <div class="links">
+        <a href="/subtitler.html" target="_blank">Sous-titreur</a>
+        <a href="/spectator.html" target="_blank">Spectateur</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/shared.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+## ROLE — Local production-like runtime
+##
+## Starts the Node/Express app (including FFmpeg for HLS generation).
+## - Exposes the web server
+## - Persists uploaded media and generated HLS segments via named volumes
+
+services:
+  web:
+    build: ./web
+    container_name: subtitling-web
+    environment:
+      - PORT=3000
+      - HLS_URL=/hls/stream.m3u8
+    ports:
+      - 3001:3000
+    volumes:
+      - ./web/src:/app/src:ro
+      - ./web/public:/app/public
+      - hls-data:/app/public/hls
+      - media-data:/app/media
+    restart: unless-stopped
+
+volumes:
+  hls-data:
+  media-data:
