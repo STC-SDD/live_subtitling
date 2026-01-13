@@ -24,38 +24,38 @@ export const config = {
   // ─── Server ─────────────────────────────────────────────────────────────────
   port: parseInt(process.env.PORT, 10) || 3000,
   host: '0.0.0.0',
-  
+
   // ─── Directories ────────────────────────────────────────────────────────────
   baseDir: ROOT,
   mediaDir: path.join(ROOT, 'media'),       // Uploaded videos
   hlsDir: path.join(ROOT, 'public', 'hls'), // Generated HLS segments
   publicDir: path.join(ROOT, 'public'),     // Static files
-  
+
   // Alias courts (utilisés par services.js)
   root: ROOT,
   media: path.join(ROOT, 'media'),
   hls: path.join(ROOT, 'public', 'hls'),
-  
+
   // ─── HLS (HTTP Live Streaming) ───────────────────────────────────────────────
   hlsSegmentDuration: 2,      // Segment duration in seconds
   segmentDuration: 2,         // (alias)
   hlsListSize: 10,            // Number of segments in the playlist
   sourcePlaylist: 'stream.m3u8',      // Playlist filename
   segmentPattern: 'seg%05d.ts',       // Segment filename pattern
-  
+
   // ─── Timing ──────────────────────────────────────────────────────────────────
   defaultDelay: 20,           // Default spectator delay (seconds)
   maxDelay: 300,              // Maximum allowed delay (5 minutes)
   ffmpegTimeout: 30000,       // FFmpeg startup timeout (ms)
   ffmpegCheckInterval: 500,   // Segment check interval (ms)
   minSegmentsForStart: 3,     // Minimum segments before signaling "ready"
-  
+
   // ─── Fragment mode (collaborative subtitling) ────────────────────────────────
   defaultSlotDuration: 30,    // Default slot duration (seconds)
   defaultOverlapDuration: 5,  // Default overlap duration (seconds)
   defaultNotifyBefore: 5,     // Notify before slot end (seconds)
   minSubtitlers: 2,           // Minimum number of subtitlers
-  
+
   // ─── FFmpeg (video transcoding) ─────────────────────────────────────────────
   ffmpeg: {
     videoCodec: 'libx264',      // H.264 video codec
@@ -70,6 +70,9 @@ export const config = {
     audioBitrate: '128k',       // Audio bitrate
     audioSampleRate: 44100,     // Sampling rate
   },
+  dataDir: path.join(ROOT, 'data'),
+  usersCsvPath: path.join(ROOT, 'data', 'users.csv'),
+  jwtSecret: process.env.JWT_SECRET || 'CHANGE_ME_IN_ENV',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -80,15 +83,15 @@ export const state = {
   // ─── Live streaming ──────────────────────────────────────────────────────────
   ffmpegProc: null,       // Active FFmpeg process (null if stopped)
   liveStartedAt: null,    // Live start timestamp (ms)
-  
+
   // ─── Captions ────────────────────────────────────────────────────────────────
   captions: [],           // Global captions history
-  
+
   // ─── Current mode ────────────────────────────────────────────────────────────
   currentMode: null,              // 'fragmentation' or null
   delaySec: config.defaultDelay,  // Current spectator delay
   minSubtitlersRequired: config.minSubtitlers,  // Required subtitlers
-  
+
   // ─── Fragment session ────────────────────────────────────────────────────────
   // Contains all state for collaborative subtitling mode
   fragment: {
@@ -129,7 +132,7 @@ export const isLiveRunning = () => state.ffmpegProc !== null;
  * Get current video timestamp (milliseconds since live start)
  * @returns {number|null} Timestamp in ms, or null if no live
  */
-export const getLiveTimestamp = () => 
+export const getLiveTimestamp = () =>
   state.liveStartedAt ? Date.now() - state.liveStartedAt : null;
 
 /**
@@ -147,10 +150,10 @@ export function resetFragment() {
   if (state.fragment.slotTimers && state.fragment.slotTimers.size) {
     for (const t of state.fragment.slotTimers) clearTimeout(t);
   }
-  
+
   const prevGrace = state.fragment.gracePeriodPercent;
   const prevRequired = state.fragment.requiredSubtitlers;
-  
+
   state.fragment = {
     active: false,
     slotDuration: config.defaultSlotDuration,

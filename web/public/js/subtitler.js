@@ -29,11 +29,31 @@ const state = {
 const el = {};
 
 // Initialize
+// document.addEventListener('DOMContentLoaded', () => {
+//   // Cache elements
+//   el.loginOverlay = document.getElementById('loginOverlay');
+//   el.nameInput = document.getElementById('nameInput');
+//   el.joinBtn = document.getElementById('joinBtn');
+//   el.statusDisplay = document.getElementById('statusDisplay');
+//   el.video = document.getElementById('video');
+//   el.videoStatus = document.getElementById('videoStatus');
+//   el.muteBtn = document.getElementById('muteBtn');
+//   el.turnIndicator = document.getElementById('turnIndicator');
+//   el.turnLabel = document.getElementById('turnLabel');
+//   el.turnTimer = document.getElementById('turnTimer');
+//   el.turnCurrent = document.getElementById('turnCurrent');
+//   el.turnProgress = document.getElementById('turnProgress');
+//   el.captionInput = document.getElementById('captionInput');
+//   el.charCount = document.getElementById('charCount');
+//   el.sendBtn = document.getElementById('sendBtn');
+//   el.historyList = document.getElementById('historyList');
+
+//   setupLoginEvents();
+// });
+
+// Initialize
 document.addEventListener('DOMContentLoaded', () => {
   // Cache elements
-  el.loginOverlay = document.getElementById('loginOverlay');
-  el.nameInput = document.getElementById('nameInput');
-  el.joinBtn = document.getElementById('joinBtn');
   el.statusDisplay = document.getElementById('statusDisplay');
   el.video = document.getElementById('video');
   el.videoStatus = document.getElementById('videoStatus');
@@ -47,9 +67,33 @@ document.addEventListener('DOMContentLoaded', () => {
   el.charCount = document.getElementById('charCount');
   el.sendBtn = document.getElementById('sendBtn');
   el.historyList = document.getElementById('historyList');
-  
-  setupLoginEvents();
+
+  // Logout button (added in subtitler.html)
+  const logoutBtn = document.getElementById('logoutBtn');
+  logoutBtn?.addEventListener('click', () => {
+    localStorage.removeItem('stc_token');
+    location.replace('/subtitler-entry.html');
+  });
+
+  // Auth gate
+  const token = localStorage.getItem('stc_token');
+  if (!token) {
+    location.replace('/subtitler-entry.html');
+    return;
+  }
+
+  // Create audio context on first user interaction (browser policy)
+  const armAudio = () => {
+    if (!state.notifySound) state.notifySound = createNotifySound();
+    document.removeEventListener('click', armAudio);
+    document.removeEventListener('keydown', armAudio);
+  };
+  document.addEventListener('click', armAudio);
+  document.addEventListener('keydown', armAudio);
+
+  initApp();
 });
+
 
 function setupLoginEvents() {
   el.joinBtn.addEventListener('click', handleJoin);
@@ -62,13 +106,13 @@ function setupLoginEvents() {
 function handleJoin() {
   const name = el.nameInput.value.trim();
   if (!name) return;
-  
+
   state.name = name;
   el.loginOverlay.classList.add('hidden');
-  
+
   // Create audio context on user interaction
   state.notifySound = createNotifySound();
-  
+
   initApp();
 }
 
@@ -80,15 +124,15 @@ function initApp() {
 // Audio notifications
 function createNotifySound() {
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  
+
   return function play(type) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
-    
+
     const now = ctx.currentTime;
-    
+
     if (type === 'turn') {
       osc.frequency.setValueAtTime(523, now);
       osc.frequency.setValueAtTime(659, now + 0.1);
@@ -97,10 +141,10 @@ function createNotifySound() {
       osc.frequency.setValueAtTime(440, now);
       osc.frequency.setValueAtTime(523, now + 0.15);
     }
-    
+
     gain.gain.setValueAtTime(0.3, now);
     gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-    
+
     osc.start(now);
     osc.stop(now + 0.3);
   };
@@ -112,10 +156,18 @@ function initWebSocket() {
   state.ws.connect();
 }
 
+// function onConnected() {
+//   updateStatus('connected');
+//   state.ws.identify(STC.CLIENT_TYPES.SUBTITLER, state.name);
+//   state.ws.send({ type: STC.WS_TYPES.FRAGMENT_JOIN, name: state.name });
+// }
+
 function onConnected() {
   updateStatus('connected');
-  state.ws.identify(STC.CLIENT_TYPES.SUBTITLER, state.name);
-  state.ws.send({ type: STC.WS_TYPES.FRAGMENT_JOIN, name: state.name });
+
+  const token = localStorage.getItem('stc_token');
+  state.ws.identify(STC.CLIENT_TYPES.SUBTITLER, { token });
+  // Le serveur fait auto-join après token OK
 }
 
 function onDisconnected() {
@@ -134,7 +186,7 @@ function handleMessage(msg) {
       }
       updateTurnUI();
       break;
-      
+
     case 'live':
       if (msg.status === 'started') {
         state.isLive = true;
@@ -149,24 +201,24 @@ function handleMessage(msg) {
         if (state.hls) { state.hls.destroy(); state.hls = null; }
       }
       break;
-      
+
     case 'fragment:joined':
       state.odId = msg.odId;
       state.fragmentMode = msg.active;
       updateTurnUI();
       break;
-      
+
     case 'fragment:started':
       state.fragmentMode = true;
       updateTurnUI();
       break;
-      
+
     case 'fragment:stopped':
       state.fragmentMode = false;
       state.isMyTurn = false;
       updateTurnUI();
       break;
-      
+
     case 'fragment:status':
       const wasMyTurn = state.isMyTurn;
       state.slotDuration = msg.slotDuration;
@@ -175,29 +227,29 @@ function handleMessage(msg) {
       state.currentSubtitlerId = msg.currentSubtitlerId;
       state.isMyTurn = (typeof msg.isMyTurn === 'boolean') ? msg.isMyTurn : (msg.currentSubtitlerId === state.odId);
       state.inGracePeriod = (typeof msg.inGracePeriod === 'boolean') ? msg.inGracePeriod : false;
-      
+
       if (!wasMyTurn && state.isMyTurn && state.notifySound) {
         state.notifySound('turn');
       }
-      
+
       updateTurnUI();
       break;
-      
+
     case 'fragment:prepare':
       if (state.notifySound) state.notifySound('prepare');
       break;
-      
+
     case 'fragment:grace-start':
       // Grace period started - visual indicator only (volume stays at 100%)
       state.inGracePeriod = true;
       updateTurnUI();
       break;
-      
+
     case 'fragment:auto-send':
       // Time's up - auto-send current text
       autoSendCaption();
       break;
-      
+
     case 'caption':
       if (state.fragmentMode && msg.caption?.odId !== state.odId) {
         addToHistory(msg.caption.text, msg.caption.subtitlerName, true);
@@ -209,7 +261,7 @@ function handleMessage(msg) {
 // Status
 function updateStatus(status) {
   el.statusDisplay.classList.remove('live');
-  
+
   if (status === 'live') {
     el.statusDisplay.classList.add('live');
     el.statusDisplay.querySelector('.text').textContent = 'En direct';
@@ -228,18 +280,18 @@ function updateTurnUI() {
     if (el.video) el.video.volume = 1;
     return;
   }
-  
+
   el.turnIndicator.classList.add('active');
-  
+
   // Volume: 100% if it's my turn AND not in grace period
   // Grace period = time to finish, not to transcribe new content
   const shouldHaveFullVolume = state.isMyTurn && !state.inGracePeriod;
   if (el.video) el.video.volume = shouldHaveFullVolume ? 1 : 0.01;
-  
+
   if (state.isMyTurn) {
     el.turnIndicator.classList.add('your-turn');
     el.turnIndicator.classList.remove('waiting');
-    
+
     if (state.inGracePeriod) {
       el.turnIndicator.classList.add('grace');
       el.turnLabel.textContent = 'Finissez !';
@@ -252,11 +304,11 @@ function updateTurnUI() {
     el.turnIndicator.classList.add('waiting');
     el.turnLabel.textContent = 'En attente';
   }
-  
+
   const m = Math.floor(state.secondsRemaining / 60);
   const s = state.secondsRemaining % 60;
   el.turnTimer.textContent = `${m}:${s.toString().padStart(2, '0')}`;
-  
+
   const totalTime = state.slotDuration + Math.floor(state.slotDuration * state.gracePeriodPercent / 100);
   el.turnProgress.style.width = `${(state.secondsRemaining / totalTime) * 100}%`;
 }
@@ -265,7 +317,7 @@ function updateTurnUI() {
 async function checkAndStartVideo() {
   try {
     const data = await STC.apiRequest(STC.API.LIVE_STATUS);
-    
+
     if (data.manifest && data.segmentCount >= 3) {
       createPlayer();
     } else if (data.running) {
@@ -279,7 +331,7 @@ async function checkAndStartVideo() {
 
 function createPlayer() {
   if (state.hls) state.hls.destroy();
-  
+
   // Configuration simple - HLS.js gère le live edge automatiquement
   state.hls = new STC.HlsPlayerManager(el.video, {
     liveSyncDurationCount: 3,      // Reste 3 segments derrière le live
@@ -287,7 +339,7 @@ function createPlayer() {
     maxBufferLength: 30,
     maxMaxBufferLength: 60,
   });
-  
+
   state.hls.load(STC.HLS.LIVE, () => {
     el.videoStatus.textContent = 'En lecture';
   }, () => {
@@ -304,9 +356,9 @@ function setupEvents() {
       sendCaption();
     }
   });
-  
+
   el.sendBtn.addEventListener('click', sendCaption);
-  
+
   el.muteBtn.addEventListener('click', () => {
     el.video.muted = !el.video.muted;
     el.muteBtn.textContent = el.video.muted ? 'Muet' : 'Son';
@@ -320,14 +372,14 @@ function updateCharCount() {
 function sendCaption() {
   const text = el.captionInput.value.trim();
   if (!text || !state.ws) return;
-  
+
   // Timestamp is computed on the server based on the slot
   state.ws.send({
     type: STC.WS_TYPES.CAPTION,
     text,
     subtitlerName: state.name,
   });
-  
+
   addToHistory(text, state.name, false);
   el.captionInput.value = '';
   updateCharCount();
@@ -345,7 +397,7 @@ function autoSendCaption() {
       subtitlerName: state.name,
       autoSent: true,
     });
-    
+
     addToHistory(text + ' (auto)', state.name, false);
     el.captionInput.value = '';
     updateCharCount();
@@ -354,13 +406,13 @@ function autoSendCaption() {
 
 function addToHistory(text, author, isOther, slotIndex = null) {
   // Éviter les doublons (même texte du même auteur dans les 2 dernières secondes)
-  const isDuplicate = state.history.length > 0 && 
-    state.history[0].text === text && 
+  const isDuplicate = state.history.length > 0 &&
+    state.history[0].text === text &&
     state.history[0].author === author &&
     (new Date() - state.history[0].time) < 2000;
-  
+
   if (isDuplicate) return;
-  
+
   state.history.unshift({ text, author, isOther, time: new Date(), slotIndex });
   if (state.history.length > 30) state.history.pop();
   renderHistory();
@@ -371,12 +423,12 @@ function renderHistory() {
     el.historyList.innerHTML = '<p class="no-history">Aucun sous-titre</p>';
     return;
   }
-  
+
   el.historyList.innerHTML = state.history.map(h => {
     const timeStr = h.time.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const authorLabel = h.isOther ? h.author : `${h.author} (vous)`;
     const cssClass = h.isOther ? 'other' : 'mine';
-    
+
     return `
       <div class="history-item ${cssClass}">
         <div class="history-header">

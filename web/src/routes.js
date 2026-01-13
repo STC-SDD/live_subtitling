@@ -15,6 +15,10 @@ import fs from 'fs';
 import multer from 'multer';
 import { config, state, log, isLiveRunning, getLiveTimestamp } from './core.js';
 import * as services from './services.js';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import * as userStore from './userStore.js';
+
 
 const router = express.Router();
 
@@ -65,7 +69,7 @@ router.post('/api/delay', (req, res) => {
   if (delaySec < minDelay) {
     return res.status(400).json({ error: `Delay too small for current fragment config. Minimum is ${minDelay}s.` });
   }
-  
+
   state.delaySec = delaySec;
   services.broadcast({ type: 'config', delaySec });
   log.info('API', `Delay set to ${delaySec}s`);
@@ -121,18 +125,18 @@ router.get('/api/live/status', (req, res) => {
 router.post('/api/live/start', async (req, res) => {
   try {
     const { source, mode = 'fragmentation', delaySec, slotDuration, overlapDuration, notifyBefore, gracePeriodPercent, requiredSubtitlers } = req.body;
-    
+
     if (!source) return res.status(400).json({ error: 'Source required' });
-    
+
     const mediaPath = services.resolveMediaPath(source);
     if (!fs.existsSync(mediaPath)) {
       return res.status(400).json({ error: 'File not found' });
     }
-    
+
     // Apply settings
     if (typeof delaySec === 'number') state.delaySec = delaySec;
-    
-      // Fragment config
+
+    // Fragment config
     const { fragment: f } = state;
     if (typeof slotDuration === 'number') f.slotDuration = slotDuration;
     if (typeof overlapDuration === 'number') f.overlapDuration = overlapDuration;
@@ -140,34 +144,34 @@ router.post('/api/live/start', async (req, res) => {
     if (typeof gracePeriodPercent === 'number') f.gracePeriodPercent = gracePeriodPercent;
     if (typeof requiredSubtitlers === 'number') f.requiredSubtitlers = requiredSubtitlers;
 
-      // Validate that the chosen parameters can actually support overlapping slots
-      const validation = services.validateFragmentConfig(f.requiredSubtitlers);
-      if (!validation.ok) {
-        return res.status(400).json({ error: validation.error });
-      }
+    // Validate that the chosen parameters can actually support overlapping slots
+    const validation = services.validateFragmentConfig(f.requiredSubtitlers);
+    if (!validation.ok) {
+      return res.status(400).json({ error: validation.error });
+    }
 
-      const minDelay = services.getMinSpectatorDelaySec();
-      if (typeof state.delaySec === 'number' && state.delaySec < minDelay) {
-        return res.status(400).json({ error: `Delay too small for fragment config. Minimum is ${minDelay}s.` });
-      }
-    
+    const minDelay = services.getMinSpectatorDelaySec();
+    if (typeof state.delaySec === 'number' && state.delaySec < minDelay) {
+      return res.status(400).json({ error: `Delay too small for fragment config. Minimum is ${minDelay}s.` });
+    }
+
     state.currentMode = mode;
-    
+
     // Check subtitler count for fragment mode
     const subtitlerCount = services.getActiveSubtitlers().length;
     if (mode === 'fragmentation' && subtitlerCount < f.requiredSubtitlers) {
-      return res.status(400).json({ 
-        error: `Need ${f.requiredSubtitlers} subtitlers (have ${subtitlerCount})` 
+      return res.status(400).json({
+        error: `Need ${f.requiredSubtitlers} subtitlers (have ${subtitlerCount})`
       });
     }
-    
+
     await services.startLive(mediaPath);
-    
+
     // Auto-start fragment mode
     if (mode === 'fragmentation') {
       services.startFragmentMode();
     }
-    
+
     log.info('API', `Live started: ${source}`);
     res.json({ ok: true, mode });
   } catch (e) {
@@ -202,7 +206,7 @@ router.get('/api/fragment/config', (req, res) => {
 router.post('/api/fragment/config', (req, res) => {
   const { slotDuration, overlapDuration, notifyBefore, gracePeriodPercent, requiredSubtitlers } = req.body;
   const { fragment: f } = state;
-  
+
   // Allow short slots for testing (e.g. 6s)
   if (typeof slotDuration === 'number' && slotDuration >= 1) f.slotDuration = slotDuration;
   if (typeof overlapDuration === 'number' && overlapDuration >= 0) f.overlapDuration = overlapDuration;
@@ -214,7 +218,7 @@ router.post('/api/fragment/config', (req, res) => {
   if (!validation.ok) {
     return res.status(400).json({ error: validation.error });
   }
-  
+
   res.json({ ok: true });
 });
 
@@ -227,7 +231,7 @@ router.get('/api/fragment/status', (req, res) => {
   const latestSlot = f.captionsBySlot.length ? f.captionsBySlot[f.captionsBySlot.length - 1] : null;
   const baseStart = latestSlot?.startTime || f.slotStartTime;
   const elapsed = baseStart ? Math.floor((Date.now() - baseStart) / 1000) : 0;
-  
+
   res.json({
     active: f.active,
     slotDuration: f.slotDuration,
@@ -299,5 +303,69 @@ router.use('/hls', express.static(config.hls, {
     }
   },
 }));
+
+
+function isValidEmail(email) {
+  return typeof email === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+router.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { name, email, password } = req.body;
+
+    if (typeof name !== 'string' || name.trim().length < 2) {
+      return res.status(400).json({ error: 'Nom invalide (min 2 caractères)' });
+    }
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ error: 'Email invalide' });
+    }
+    if (typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ error: 'Mot de passe invalide (min 6 caractères)' });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const id = services.generateUUID();
+
+    const user = userStore.addUser({
+      id,
+      email,
+      name: name.trim(),
+      passwordHash,
+    });
+
+    res.json({ ok: true, user: { id: user.id, email: user.email, name: user.name } });
+  } catch (e) {
+    if (e.code === 'EMAIL_EXISTS') return res.status(409).json({ error: 'Email déjà utilisé' });
+    log.error('AUTH', 'Signup failed:', e.message);
+    res.status(500).json({ error: 'Signup failed' });
+  }
+});
+
+router.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!isValidEmail(email)) return res.status(400).json({ error: 'Email invalide' });
+    if (typeof password !== 'string') return res.status(400).json({ error: 'Mot de passe invalide' });
+
+    const user = userStore.findUserByEmail(email);
+    if (!user) return res.status(401).json({ error: 'Identifiants invalides' });
+
+    const ok = await bcrypt.compare(password, user.passwordHash);
+    if (!ok) return res.status(401).json({ error: 'Identifiants invalides' });
+
+    const token = jwt.sign(
+      { sub: user.id, email: user.email, name: user.name, role: 'subtitler' },
+      config.jwtSecret,
+      { expiresIn: '7d' }
+    );
+
+    res.json({ ok: true, token, user: { id: user.id, email: user.email, name: user.name } });
+  } catch (e) {
+    log.error('AUTH', 'Login failed:', e.message);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
 
 export default router;
