@@ -11,6 +11,8 @@
 import { WebSocketServer } from 'ws';
 import { state, log, isLiveRunning, getLiveTimestamp } from './core.js';
 import * as services from './services.js';
+import jwt from 'jsonwebtoken';
+import { config } from './core.js';
 
 /**
  * Initialize the WebSocket server on an existing HTTP server
@@ -19,16 +21,16 @@ import * as services from './services.js';
  */
 export function createWebSocketServer(server) {
   const wss = new WebSocketServer({ server, path: '/ws' });
-  
+
   wss.on('connection', (ws) => {
     // Assign unique ID
     ws.odId = services.generateUUID();
     ws.clientType = null;
     ws.subtitlerName = null;
-    
+
     services.addClient(ws);
     log.info('WS', `Client connected: ${ws.odId}`);
-    
+
     // Send initial state
     services.send(ws, {
       type: 'init',
@@ -38,34 +40,34 @@ export function createWebSocketServer(server) {
       mode: state.currentMode,
       fragmentMode: state.fragment.active,
     });
-    
+
     ws.on('message', (data) => handleMessage(ws, data));
-    
+
     ws.on('close', () => {
       services.removeClient(ws);
-      
+
       // Remove from subtitlers if applicable
       if (ws.clientType === 'subtitler' && state.fragment.subtitlers.has(ws.odId)) {
         state.fragment.subtitlers.delete(ws.odId);
         services.broadcastFragmentStatus();
         log.info('WS', `Subtitler left: ${ws.subtitlerName}`);
       }
-      
+
       log.info('WS', `Client disconnected: ${ws.odId}`);
     });
-    
+
     ws.on('error', (err) => {
       log.error('WS', `Error (${ws.odId}):`, err.message);
     });
   });
-  
+
   // Fragment status broadcast (every second)
   setInterval(() => {
     if (state.fragment.active) {
       services.broadcastFragmentStatus();
     }
   }, 1000);
-  
+
   log.info('WS', 'WebSocket server ready');
   return wss;
 }
@@ -83,24 +85,24 @@ function handleMessage(ws, data) {
     log.error('WS', 'Invalid JSON');
     return;
   }
-  
+
   switch (msg.type) {
     case 'identify':
       handleIdentify(ws, msg);
       break;
-      
+
     case 'fragment:join':
       handleFragmentJoin(ws, msg);
       break;
-      
+
     case 'fragment:leave':
       handleFragmentLeave(ws);
       break;
-      
+
     case 'caption':
       handleCaption(ws, msg);
       break;
-      
+
     default:
       log.debug('WS', `Unknown message type: ${msg.type}`);
   }
@@ -109,22 +111,63 @@ function handleMessage(ws, data) {
 /**
  * Handle client identification
  */
+// function handleIdentify(ws, msg) {
+//   const { clientType, name } = msg;
+
+//   if (!['admin', 'subtitler', 'spectator'].includes(clientType)) {
+//     return;
+//   }
+
+//   ws.clientType = clientType;
+//   if (name) ws.subtitlerName = name;
+
+//   log.info('WS', `Identified: ${clientType}${name ? ` (${name})` : ''}`);
+
+//   // Auto-join fragment session for subtitlers (if not already joined)
+//   if (clientType === 'subtitler' && name && !state.fragment.subtitlers.has(ws.odId)) {
+//     handleFragmentJoin(ws, { name });
+//   }
+// }
+
 function handleIdentify(ws, msg) {
-  const { clientType, name } = msg;
-  
-  if (!['admin', 'subtitler', 'spectator'].includes(clientType)) {
-    return;
+  const { clientType, name, token } = msg;
+
+  if (!['admin', 'subtitler', 'spectator'].includes(clientType)) return;
+
+  if (clientType === 'subtitler') {
+    if (!token || typeof token !== 'string') {
+      services.send(ws, { type: 'error', error: 'AUTH_REQUIRED' });
+      return;
+    }
+
+    try {
+      const payload = jwt.verify(token, config.jwtSecret);
+      if (payload.role !== 'subtitler') {
+        services.send(ws, { type: 'error', error: 'INVALID_ROLE' });
+        return;
+      }
+
+      ws.clientType = 'subtitler';
+      ws.user = { id: payload.sub, email: payload.email, name: payload.name };
+      ws.subtitlerName = payload.name;
+
+      log.info('WS', `Identified: subtitler (${ws.subtitlerName})`);
+
+      if (!state.fragment.subtitlers.has(ws.odId)) {
+        handleFragmentJoin(ws, { name: ws.subtitlerName });
+      }
+      return;
+    } catch {
+      services.send(ws, { type: 'error', error: 'INVALID_TOKEN' });
+      return;
+    }
   }
-  
+
+  // non-subtitler unchanged
   ws.clientType = clientType;
   if (name) ws.subtitlerName = name;
-  
-  log.info('WS', `Identified: ${clientType}${name ? ` (${name})` : ''}`);
-  
-  // Auto-join fragment session for subtitlers (if not already joined)
-  if (clientType === 'subtitler' && name && !state.fragment.subtitlers.has(ws.odId)) {
-    handleFragmentJoin(ws, { name });
-  }
+  if (ws.clientType !== 'subtitler') return;
+
 }
 
 /**
@@ -132,12 +175,12 @@ function handleIdentify(ws, msg) {
  */
 function handleFragmentJoin(ws, msg) {
   const name = msg.name || ws.subtitlerName || 'Anonymous';
-  
+
   // Skip if already joined
   if (state.fragment.subtitlers.has(ws.odId)) {
     return;
   }
-  
+
   // Add to subtitlers map
   state.fragment.subtitlers.set(ws.odId, {
     id: ws.odId,
@@ -145,19 +188,19 @@ function handleFragmentJoin(ws, msg) {
     ws,
     joinedAt: Date.now(),
   });
-  
+
   ws.subtitlerName = name;
-  
+
   // Confirm join
   services.send(ws, {
     type: 'fragment:joined',
     odId: ws.odId,
     active: state.fragment.active,
   });
-  
+
   log.info('FRAGMENT', `Subtitler joined: ${name}`);
   services.broadcastFragmentStatus();
-  
+
   // Check if we can start fragment mode
   const activeCount = services.getActiveSubtitlers().length;
   if (state.fragment.active && activeCount >= state.fragment.requiredSubtitlers && !state.fragment.slotTimer) {
@@ -196,9 +239,9 @@ function handleFragmentLeave(ws) {
  */
 function handleCaption(ws, msg) {
   const { text, subtitlerName, autoSent } = msg;
-  
+
   if (!text || typeof text !== 'string') return;
-  
+
   const caption = {
     id: services.generateUUID(),
     text: text.trim().slice(0, 500),
@@ -208,11 +251,11 @@ function handleCaption(ws, msg) {
     liveTimestamp: getLiveTimestamp(),
     autoSent: autoSent || false,
   };
-  
+
   // Fragment mode: add to current slot (timestamp calculated by addCaptionToSlot)
   if (state.fragment.active) {
     const accepted = services.addCaptionToSlot(caption);
-    
+
     if (accepted) {
       // Broadcast to OTHER subtitlers (exclude sender to avoid duplication)
       services.broadcast(
@@ -223,19 +266,19 @@ function handleCaption(ws, msg) {
   } else {
     // Non-fragment mode: direct broadcast to spectators
     state.captions.push(caption);
-    
+
     services.broadcast({
       type: 'caption',
       caption,
       displayAt: Date.now() + state.delaySec * 1000,
     }, (c) => c.clientType === 'spectator');
-    
+
     services.broadcastToAdmins({
       type: 'caption',
       caption,
     });
   }
-  
+
   log.debug('CAPTION', `From ${caption.subtitlerName}: "${caption.text.slice(0, 30)}..."`);
 }
 
