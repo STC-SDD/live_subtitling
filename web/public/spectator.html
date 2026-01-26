@@ -1,158 +1,149 @@
 <!doctype html>
 <!--
-  ROLE — Spectator page
-
-  Viewer UI used to:
-  - watch the DELAYED HLS stream
-  - receive and display captions over WebSocket (word-by-word)
+  ROLE — Spectator page with session support
 -->
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Spectateur</title>
+  <title>Spectateur — Live</title>
   <script src="/vendor/hls.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      height: 100%;
-      overflow: hidden;
-    }
-    body { 
+    html, body { height: 100%; overflow: hidden; }
+    
+    body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #000; 
+      background: #000;
       color: #fff;
     }
     
     .video-container {
-      position: fixed;
-      top: 0;
-      left: 0;
+      position: relative;
       width: 100%;
-      height: 100%;
+      height: 100vh;
+      background: #000;
     }
     
     video {
       width: 100%;
       height: 100%;
       object-fit: contain;
-      background: #000;
     }
     
-    /* Waiting screen */
     .waiting-screen {
-      position: fixed;
+      position: absolute;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 100%;
+      right: 0;
+      bottom: 0;
       background: #0a0a0a;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      z-index: 10;
+      flex-direction: column;
+      gap: 20px;
     }
-    .waiting-screen.hidden { display: none; }
+    
+    .waiting-screen.hidden {
+      display: none;
+    }
     
     .waiting-text {
+      font-size: 1.2em;
       color: #666;
-      font-size: 1.1em;
     }
     
-    .waiting-spinner {
-      width: 40px;
-      height: 40px;
-      border: 3px solid #222;
-      border-top-color: #666;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-bottom: 20px;
-    }
-    
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    
-    /* Caption display */
     .caption-display {
-      position: fixed;
-      bottom: 10%;
+      position: absolute;
+      bottom: 80px;
       left: 50%;
       transform: translateX(-50%);
-      max-width: 80%;
-      padding: 12px 24px;
+      max-width: 90%;
+      width: 800px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    
+    .caption-display.visible {
+      opacity: 1;
+    }
+    
+    .caption-line {
       background: rgba(0, 0, 0, 0.85);
+      padding: 12px 20px;
+      margin: 4px 0;
       border-radius: 4px;
       font-size: 1.4em;
+      line-height: 1.5;
       text-align: center;
-      line-height: 1.6;
-      z-index: 20;
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-    .caption-display.visible { opacity: 1; }
-    
-    /* Ligne de sous-titre individuelle */
-    .caption-line {
-      margin: 4px 0;
-      animation: fadeIn 0.15s ease-out;
+      color: #fff;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
     }
     
-    @keyframes fadeIn {
-      from { opacity: 0.5; }
-      to { opacity: 1; }
-    }
-    
-    /* Controls bar */
-    .controls-bar {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      padding: 12px 20px;
-      background: linear-gradient(transparent, rgba(0,0,0,0.8));
+    .controls {
+      position: absolute;
+      top: 20px;
+      right: 20px;
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      opacity: 0;
-      transition: opacity 0.3s;
-      z-index: 30;
+      gap: 10px;
+      z-index: 10;
     }
-    .video-container:hover .controls-bar,
-    .controls-bar:hover { opacity: 1; }
     
-    .controls-left {
+    .controls button {
+      padding: 10px 16px;
+      background: rgba(0, 0, 0, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+      color: #fff;
+      font-size: 0.9em;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .controls button:hover {
+      background: rgba(0, 0, 0, 0.9);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+    
+    .status {
+      position: absolute;
+      top: 20px;
+      left: 20px;
       display: flex;
       align-items: center;
       gap: 12px;
-    }
-    
-    .status-text {
-      font-size: 0.85em;
-      color: #888;
-    }
-    .status-text.live { color: #2ecc71; }
-    
-    .controls-right {
-      display: flex;
-      gap: 8px;
-    }
-    
-    .ctrl-btn {
-      padding: 8px 14px;
-      background: rgba(255,255,255,0.1);
-      border: none;
+      padding: 8px 16px;
+      background: rgba(0, 0, 0, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.1);
       border-radius: 4px;
-      color: #fff;
-      font-size: 0.85em;
-      cursor: pointer;
+      font-size: 0.9em;
+      z-index: 10;
     }
-    .ctrl-btn:hover { background: rgba(255,255,255,0.2); }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #555;
+    }
+    
+    .status.live .status-dot {
+      background: #2ecc71;
+      animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
 
-    /* Fullscreen */
-    .video-container:fullscreen .controls-bar {
-      padding: 16px 24px;
+    .session-info {
+      position: absolute;
+      top: 70px;
+      left: 20px;
+      z-index: 10;
     }
   </style>
 </head>
@@ -161,20 +152,21 @@
     <video id="video" playsinline></video>
     
     <div class="waiting-screen" id="waitingScreen">
-      <div class="waiting-spinner"></div>
       <div class="waiting-text" id="waitingText">En attente du live...</div>
     </div>
     
     <div class="caption-display" id="captionDisplay"></div>
     
-    <div class="controls-bar" id="controlsBar">
-      <div class="controls-left">
-        <span class="status-text" id="statusText">Connexion...</span>
-      </div>
-      <div class="controls-right">
-        <button class="ctrl-btn" id="muteBtn">Son</button>
-        <button class="ctrl-btn" id="fullscreenBtn">Plein écran</button>
-      </div>
+    <div class="status" id="status">
+      <div class="status-dot"></div>
+      <span id="statusText">Connexion...</span>
+    </div>
+
+    <div class="session-info" id="sessionInfo"></div>
+    
+    <div class="controls">
+      <button id="muteBtn">Son</button>
+      <button id="fullscreenBtn">Plein écran</button>
     </div>
   </div>
 
