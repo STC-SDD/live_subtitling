@@ -49,7 +49,7 @@
 //   el.uploadArea = document.getElementById('uploadArea');
 //   el.fileInput = document.getElementById('fileInput');
 //   el.uploadMessage = document.getElementById('uploadMessage');
-  
+
 //   // Setup
 //   initWebSocket();
 //   loadVideos();
@@ -113,17 +113,17 @@
 
 //   // Keep the "repos estimé" info fresh even when config is set via WS/start
 //   updateRestInfoFromInputs();
-  
+
 //   if (state.subtitlers.length === 0) {
 //     el.subtitlerList.innerHTML = '<span style="color:#444;font-size:0.85em;">Aucun connecté</span>';
 //     el.currentTurnSection.style.display = 'none';
 //     return;
 //   }
-  
+
 //   el.subtitlerList.innerHTML = state.subtitlers.map(s => 
 //     `<span class="subtitler-chip ${s.id === msg.currentSubtitlerId ? 'active' : ''}">${STC.escapeHtml(s.name)}</span>`
 //   ).join('');
-  
+
 //   // Show turn info if fragment active
 //   if (msg.active && msg.currentSubtitlerName) {
 //     el.currentTurnSection.style.display = 'block';
@@ -198,7 +198,7 @@
 //       const data = await STC.apiRequest(STC.API.LIVE_STATUS);
 //       el.segmentCount.textContent = data.segmentCount || 0;
 //       el.delay.textContent = `${data.delaySec || 20}s`;
-      
+
 //       if (data.liveStartedAt) {
 //         const duration = Math.floor((Date.now() - data.liveStartedAt) / 1000);
 //         el.duration.textContent = formatTime(duration);
@@ -235,10 +235,10 @@
 //     input?.addEventListener('input', updateRestInfoFromInputs);
 //     input?.addEventListener('change', updateRestInfoFromInputs);
 //   });
-  
+
 //   el.uploadArea.addEventListener('click', () => el.fileInput.click());
 //   el.fileInput.addEventListener('change', handleUpload);
-  
+
 //   // Drag & drop
 //   el.uploadArea.addEventListener('dragover', e => {
 //     e.preventDefault();
@@ -263,16 +263,16 @@
 //     showMessage(el.controlMessage, 'Sélectionnez une vidéo', 'error');
 //     return;
 //   }
-  
+
 //   const requiredSubtitlers = parseInt(el.requiredSubtitlers.value) || 2;
 //   if (state.subtitlers.length < requiredSubtitlers) {
 //     showMessage(el.controlMessage, `Il faut ${requiredSubtitlers} sous-titreurs (${state.subtitlers.length} connectés)`, 'error');
 //     return;
 //   }
-  
+
 //   el.startBtn.disabled = true;
 //   showMessage(el.controlMessage, 'Démarrage...', '');
-  
+
 //   try {
 //     // Start live with all config
 //     await STC.apiRequest(STC.API.LIVE_START, {
@@ -287,7 +287,7 @@
 //         notifyBefore: 5,
 //       }),
 //     });
-    
+
 //     showMessage(el.controlMessage, 'Live démarré', 'success');
 //   } catch (e) {
 //     showMessage(el.controlMessage, e.message || 'Erreur', 'error');
@@ -297,7 +297,7 @@
 
 // async function stopLive() {
 //   el.stopBtn.disabled = true;
-  
+
 //   try {
 //     await STC.apiRequest(STC.API.LIVE_STOP, { method: 'POST' });
 //     showMessage(el.controlMessage, 'Live arrêté', 'success');
@@ -310,12 +310,12 @@
 // async function handleUpload() {
 //   const file = el.fileInput.files[0];
 //   if (!file) return;
-  
+
 //   const formData = new FormData();
 //   formData.append('video', file);
-  
+
 //   showMessage(el.uploadMessage, 'Upload en cours...', '');
-  
+
 //   try {
 //     await fetch(STC.API.UPLOAD, { method: 'POST', body: formData });
 //     showMessage(el.uploadMessage, 'Vidéo ajoutée', 'success');
@@ -332,7 +332,7 @@
 //   } else {
 //     container.innerHTML = `<div style="margin-top:12px;color:#888;font-size:0.85em;">${text}</div>`;
 //   }
-  
+
 //   if (type) {
 //     setTimeout(() => {
 //       if (container.querySelector('.message')?.textContent === text) {
@@ -386,15 +386,15 @@ document.addEventListener('DOMContentLoaded', () => {
   el.fileInput = document.getElementById('fileInput');
   el.uploadMessage = document.getElementById('uploadMessage');
   el.sessionInfo = document.getElementById('sessionInfo');
-  
+
   // Check if starting with a session
   const urlParams = new URLSearchParams(window.location.search);
   const sessionId = urlParams.get('session');
-  
+
   if (sessionId) {
     loadSession(sessionId);
   }
-  
+
   // Setup
   initWebSocket();
   loadVideos();
@@ -406,11 +406,12 @@ document.addEventListener('DOMContentLoaded', () => {
 // Load session
 async function loadSession(sessionId) {
   try {
-    const data = await STC.apiRequest(`/api/sessions/${sessionId}`);
+    // const data = await STC.apiRequest(`/api/sessions/${sessionId}`);
+    const data = await adminApi(`/api/sessions/${sessionId}`);
     const session = data.session;
-    
+
     state.currentSessionId = sessionId;
-    
+
     // Display session info
     if (el.sessionInfo) {
       el.sessionInfo.innerHTML = `
@@ -421,7 +422,7 @@ async function loadSession(sessionId) {
         </div>
       `;
     }
-    
+
     // Pre-fill configuration
     const cfg = session.config || {};
     if (el.videoSelect) el.videoSelect.value = session.videoPath;
@@ -430,9 +431,9 @@ async function loadSession(sessionId) {
     if (cfg.slotDuration) el.slotDuration.value = cfg.slotDuration;
     if (cfg.overlapDuration) el.overlapDuration.value = cfg.overlapDuration;
     if (cfg.gracePeriodPercent) el.gracePeriod.value = cfg.gracePeriodPercent;
-    
+
     updateRestInfoFromInputs();
-    
+
     // Auto-start if session is active
     if (session.status === 'active') {
       // Check if already running
@@ -455,7 +456,32 @@ function initWebSocket() {
 
 function onConnected() {
   state.ws.identify(STC.CLIENT_TYPES.ADMIN);
+  const ADMIN_TOKEN = localStorage.getItem('stc_admin_token');
+  if (!ADMIN_TOKEN) {
+    location.replace('/admin-login.html');
+    return;
+  }
+
+  const payload = { token: ADMIN_TOKEN };
+  // keep session binding if you use ?session=...
+  if (state.currentSessionId) payload.sessionId = state.currentSessionId;
+
+  state.ws.identify(STC.CLIENT_TYPES.ADMIN, payload);
 }
+
+const ADMIN_TOKEN = localStorage.getItem('stc_admin_token');
+if (!ADMIN_TOKEN) location.replace('/admin-login.html');
+
+function adminApi(url, options = {}) {
+  return STC.apiRequest(url, {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      Authorization: `Bearer ${ADMIN_TOKEN}`,
+    },
+  });
+}
+
 
 function onDisconnected() {
   setTimeout(() => state.ws?.connect(), 2000);
@@ -501,17 +527,17 @@ function updateSubtitlers(msg) {
   el.subtitlerCount.textContent = `${state.subtitlers.length}/${required}`;
 
   updateRestInfoFromInputs();
-  
+
   if (state.subtitlers.length === 0) {
     el.subtitlerList.innerHTML = '<span style="color:#444;font-size:0.85em;">Aucun connecté</span>';
     el.currentTurnSection.style.display = 'none';
     return;
   }
-  
-  el.subtitlerList.innerHTML = state.subtitlers.map(s => 
+
+  el.subtitlerList.innerHTML = state.subtitlers.map(s =>
     `<span class="subtitler-chip ${s.id === msg.currentSubtitlerId ? 'active' : ''}">${STC.escapeHtml(s.name)}</span>`
   ).join('');
-  
+
   if (msg.active && msg.currentSubtitlerName) {
     el.currentTurnSection.style.display = 'block';
     el.currentTurnName.textContent = msg.currentSubtitlerName + (msg.inGracePeriod ? ' (bonus)' : '');
@@ -585,7 +611,7 @@ function startStatusPolling() {
       const data = await STC.apiRequest(STC.API.LIVE_STATUS);
       el.segmentCount.textContent = data.segmentCount || 0;
       el.delay.textContent = `${data.delaySec || 20}s`;
-      
+
       if (data.liveStartedAt) {
         const duration = Math.floor((Date.now() - data.liveStartedAt) / 1000);
         el.duration.textContent = formatTime(duration);
@@ -621,10 +647,10 @@ function setupEvents() {
     input?.addEventListener('input', updateRestInfoFromInputs);
     input?.addEventListener('change', updateRestInfoFromInputs);
   });
-  
+
   el.uploadArea.addEventListener('click', () => el.fileInput.click());
   el.fileInput.addEventListener('change', handleUpload);
-  
+
   el.uploadArea.addEventListener('dragover', e => {
     e.preventDefault();
     el.uploadArea.style.borderColor = '#555';
@@ -645,25 +671,26 @@ function setupEvents() {
 async function startLive() {
   const video = el.videoSelect.value;
   const requiredSubtitlers = parseInt(el.requiredSubtitlers.value) || 2;
-  
+
   // If we have a session, use it
   if (state.currentSessionId) {
     if (state.subtitlers.length < requiredSubtitlers) {
       showMessage(el.controlMessage, `Il faut ${requiredSubtitlers} sous-titreurs (${state.subtitlers.length} connectés)`, 'error');
       return;
     }
-    
+
     el.startBtn.disabled = true;
     showMessage(el.controlMessage, 'Démarrage de la session...', '');
-    
+
     try {
-      await STC.apiRequest(STC.API.LIVE_START, {
+      // await STC.apiRequest(STC.API.LIVE_START, {
+      await adminApi(STC.API.LIVE_START, {
         method: 'POST',
         body: JSON.stringify({
           sessionId: state.currentSessionId,
         }),
       });
-      
+
       showMessage(el.controlMessage, 'Session démarrée', 'success');
     } catch (e) {
       showMessage(el.controlMessage, e.message || 'Erreur', 'error');
@@ -671,21 +698,21 @@ async function startLive() {
     }
     return;
   }
-  
+
   // Standard start (no session)
   if (!video) {
     showMessage(el.controlMessage, 'Sélectionnez une vidéo', 'error');
     return;
   }
-  
+
   if (state.subtitlers.length < requiredSubtitlers) {
     showMessage(el.controlMessage, `Il faut ${requiredSubtitlers} sous-titreurs (${state.subtitlers.length} connectés)`, 'error');
     return;
   }
-  
+
   el.startBtn.disabled = true;
   showMessage(el.controlMessage, 'Démarrage...', '');
-  
+
   try {
     await STC.apiRequest(STC.API.LIVE_START, {
       method: 'POST',
@@ -699,7 +726,7 @@ async function startLive() {
         notifyBefore: 5,
       }),
     });
-    
+
     showMessage(el.controlMessage, 'Live démarré', 'success');
   } catch (e) {
     showMessage(el.controlMessage, e.message || 'Erreur', 'error');
@@ -709,11 +736,12 @@ async function startLive() {
 
 async function stopLive() {
   el.stopBtn.disabled = true;
-  
+
   try {
-    await STC.apiRequest(STC.API.LIVE_STOP, { method: 'POST' });
+    // await STC.apiRequest(STC.API.LIVE_STOP, { method: 'POST' });
+    await adminApi(STC.API.LIVE_STOP, { method: 'POST' });
     showMessage(el.controlMessage, 'Live arrêté', 'success');
-    
+
     // Clear session info if present
     state.currentSessionId = null;
     if (el.sessionInfo) {
@@ -728,12 +756,12 @@ async function stopLive() {
 async function handleUpload() {
   const file = el.fileInput.files[0];
   if (!file) return;
-  
+
   const formData = new FormData();
   formData.append('video', file);
-  
+
   showMessage(el.uploadMessage, 'Upload en cours...', '');
-  
+
   try {
     await fetch(STC.API.UPLOAD, { method: 'POST', body: formData });
     showMessage(el.uploadMessage, 'Vidéo ajoutée', 'success');
@@ -750,7 +778,7 @@ function showMessage(container, text, type) {
   } else {
     container.innerHTML = `<div style="margin-top:12px;color:#888;font-size:0.85em;">${text}</div>`;
   }
-  
+
   if (type) {
     setTimeout(() => {
       if (container.querySelector('.message')?.textContent === text) {
@@ -759,3 +787,13 @@ function showMessage(container, text, type) {
     }, 4000);
   }
 }
+
+// const ADMIN_TOKEN = localStorage.getItem("stc_admin_token");
+// if (!ADMIN_TOKEN) location.href = "/admin-login.html";
+
+// function adminApi(url, options = {}) {
+//   return STC.apiRequest(url, {
+//     ...options,
+//     headers: { ...(options.headers || {}), Authorization: `Bearer ${ADMIN_TOKEN}` }
+//   });
+// }

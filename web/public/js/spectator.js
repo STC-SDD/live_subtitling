@@ -13,7 +13,7 @@
 //   hls: null,
 //   isLive: false,
 //   delaySec: 20,
-  
+
 //   // Currently displayed captions (word-by-word format)
 //   // Map<captionId, { words: string[], totalWords: number, displayedAt: number, complete: boolean }>
 //   activeCaptions: new Map(),
@@ -32,7 +32,7 @@
 //   el.statusText = document.getElementById('statusText');
 //   el.muteBtn = document.getElementById('muteBtn');
 //   el.fullscreenBtn = document.getElementById('fullscreenBtn');
-  
+
 //   initApp();
 // });
 
@@ -46,7 +46,7 @@
 //     el.video.muted = !el.video.muted;
 //     el.muteBtn.textContent = el.video.muted ? 'Muet' : 'Son';
 //   });
-  
+
 //   el.fullscreenBtn.addEventListener('click', () => {
 //     const container = el.video.parentElement;
 //     if (document.fullscreenElement) {
@@ -88,7 +88,7 @@
 //         el.statusText.textContent = 'Hors ligne';
 //       }
 //       break;
-      
+
 //     case 'live':
 //       if (msg.status === 'started') {
 //         state.isLive = true;
@@ -109,12 +109,12 @@
 //         if (state.hls) { state.hls.destroy(); state.hls = null; }
 //       }
 //       break;
-      
+
 //     case 'caption':
 //       // Ancien format (texte complet) - pour compatibilité
 //       displayFullCaption(msg.caption.text);
 //       break;
-      
+
 //     case 'caption:word':
 //       // Nouveau format (mot par mot)
 //       displayWord(msg.caption);
@@ -130,12 +130,12 @@
 //   try {
 //     const data = await STC.apiRequest(STC.API.LIVE_STATUS);
 //     state.delaySec = data.delaySec || 20;
-    
+
 //     // For the delayed stream, ensure enough segments for getDelayedPlaylist
 //     // The configured delay INCLUDES HLS buffering (~6s)
 //     // So minSegments = delaySec/2 + 1 extra segment
 //     const minSegments = Math.ceil(state.delaySec / 2) + 1;
-    
+
 //     if (data.manifest && data.segmentCount >= minSegments) {
 //       createPlayer();
 //     } else if (data.running) {
@@ -151,14 +151,14 @@
 
 // function createPlayer() {
 //   if (state.hls) state.hls.destroy();
-  
+
 //   state.hls = new STC.HlsPlayerManager(el.video, {
 //     liveSyncDurationCount: 3,
 //     liveMaxLatencyDurationCount: 6,
 //     maxBufferLength: 30,
 //     maxMaxBufferLength: 60,
 //   });
-  
+
 //   state.hls.load(STC.HLS.DELAYED, () => {
 //     el.waitingScreen.classList.add('hidden');
 //   }, () => {
@@ -176,7 +176,7 @@
 //  */
 // function displayFullCaption(text) {
 //   console.log(`[Caption] Full text: "${text.slice(0, 50)}..."`);
-  
+
 //   const id = 'legacy_' + Date.now();
 //   state.activeCaptions.set(id, {
 //     words: text.split(/\s+/),
@@ -184,7 +184,7 @@
 //     displayedAt: Date.now(),
 //     complete: true,
 //   });
-  
+
 //   cleanupOldCaptions();
 //   renderCaptions();
 // }
@@ -197,10 +197,10 @@
 //  */
 // function displayWord(caption) {
 //   const { id, word, wordIndex, totalWords, isLast, slotDurationMs } = caption;
-  
+
 //   // Retrieve or create the entry for this caption
 //   let entry = state.activeCaptions.get(id);
-  
+
 //   if (!entry) {
 //     // First word of this caption
 //     entry = {
@@ -213,26 +213,26 @@
 //     state.activeCaptions.set(id, entry);
 //     console.log(`[Caption] New caption started (${totalWords} words)`);
 //   }
-  
+
 //   // Add the word at its position
 //   entry.words[wordIndex] = word;
-  
+
 //   // Mark as complete if this is the last word
 //   if (isLast) {
 //     entry.complete = true;
 //     entry.completedAt = Date.now();
 //     console.log(`[Caption] Caption complete: "${entry.words.join(' ')}"`);
-    
+
 //     // Schedule removal after captionDuration
 //     setTimeout(() => {
 //       state.activeCaptions.delete(id);
 //       renderCaptions();
 //     }, state.captionDuration);
 //   }
-  
+
 //   // Cleanup old captions if too many
 //   cleanupOldCaptions();
-  
+
 //   // Mettre à jour l'affichage
 //   renderCaptions();
 // }
@@ -242,14 +242,14 @@
 //  */
 // function cleanupOldCaptions() {
 //   const now = Date.now();
-  
+
 //   // Remove expired captions
 //   for (const [id, entry] of state.activeCaptions) {
 //     if (entry.complete && entry.completedAt && (now - entry.completedAt > state.captionDuration)) {
 //       state.activeCaptions.delete(id);
 //     }
 //   }
-  
+
 //   // Keep only the last N
 //   while (state.activeCaptions.size > state.maxDisplayed) {
 //     const firstKey = state.activeCaptions.keys().next().value;
@@ -269,25 +269,25 @@
 //     el.captionDisplay.innerHTML = '';
 //     return;
 //   }
-  
+
 //   const lines = [];
-  
+
 //   for (const [id, entry] of state.activeCaptions) {
 //     // Construire le texte avec les mots reçus
 //     const displayWords = entry.words.filter(w => w !== '');
-    
+
 //     if (displayWords.length > 0) {
 //       const text = displayWords.join(' ');
 //       lines.push(`<div class="caption-line">${STC.escapeHtml(text)}</div>`);
 //     }
 //   }
-  
+
 //   if (lines.length === 0) {
 //     el.captionDisplay.classList.remove('visible');
 //     el.captionDisplay.innerHTML = '';
 //     return;
 //   }
-  
+
 //   el.captionDisplay.innerHTML = lines.join('');
 //   el.captionDisplay.classList.add('visible');
 // }
@@ -297,14 +297,17 @@
  * ROLE — Spectator UI controller with session or free mode
  */
 
+/**
+ * ROLE — Spectator UI controller (session required)
+ */
+
 const state = {
   ws: null,
   hls: null,
   isLive: false,
   delaySec: 20,
   sessionId: null,
-  isFreeMode: false,
-  
+
   activeCaptions: new Map(),
   maxDisplayed: 3,
   captionDuration: 10000,
@@ -321,34 +324,19 @@ document.addEventListener('DOMContentLoaded', () => {
   el.muteBtn = document.getElementById('muteBtn');
   el.fullscreenBtn = document.getElementById('fullscreenBtn');
   el.sessionInfo = document.getElementById('sessionInfo');
-  
-  // Check mode: session or free
+
+  // Session gate - must have session ID
   const sessionId = localStorage.getItem('spectator_session_id');
-  
-  if (sessionId) {
-    state.sessionId = sessionId;
-    state.isFreeMode = false;
-    loadSessionInfo();
-  } else {
-    state.isFreeMode = true;
-    displayFreeMode();
+  if (!sessionId) {
+    location.replace('/spectator-entry.html');
+    return;
   }
-  
+
+  state.sessionId = sessionId;
+  loadSessionInfo();
   initApp();
 });
 
-// Display free mode info
-function displayFreeMode() {
-  if (el.sessionInfo) {
-    el.sessionInfo.innerHTML = `
-      <div style="background:rgba(52,152,219,0.05);border:1px solid rgba(52,152,219,0.2);border-radius:4px;padding:8px 12px;">
-        <span style="font-size:0.85em;color:#3498db;font-weight:500;">🌐 Live Direct</span>
-      </div>
-    `;
-  }
-}
-
-// Load session info
 async function loadSessionInfo() {
   try {
     const data = await STC.apiRequest(`/api/sessions/${state.sessionId}`);
@@ -364,12 +352,10 @@ async function loadSessionInfo() {
     }
   } catch (e) {
     console.error('Failed to load session:', e);
-    // If session not found, switch to free mode
     if (e.message.includes('404') || e.message.includes('not found')) {
+      alert('Session invalide');
       localStorage.removeItem('spectator_session_id');
-      state.sessionId = null;
-      state.isFreeMode = true;
-      displayFreeMode();
+      location.replace('/spectator-entry.html');
     }
   }
 }
@@ -384,7 +370,7 @@ function setupControls() {
     el.video.muted = !el.video.muted;
     el.muteBtn.textContent = el.video.muted ? 'Muet' : 'Son';
   });
-  
+
   el.fullscreenBtn.addEventListener('click', () => {
     const container = el.video.parentElement;
     if (document.fullscreenElement) {
@@ -395,7 +381,6 @@ function setupControls() {
   });
 }
 
-// WebSocket
 function initWebSocket() {
   state.ws = new STC.WebSocketManager(handleMessage, onConnected, onDisconnected);
   state.ws.connect();
@@ -426,7 +411,7 @@ function handleMessage(msg) {
         el.statusText.textContent = 'Hors ligne';
       }
       break;
-      
+
     case 'live':
       if (msg.status === 'started') {
         state.isLive = true;
@@ -447,28 +432,24 @@ function handleMessage(msg) {
         if (state.hls) { state.hls.destroy(); state.hls = null; }
       }
       break;
-      
+
     case 'caption':
       displayFullCaption(msg.caption.text);
       break;
-      
+
     case 'caption:word':
       displayWord(msg.caption);
       break;
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// VIDEO PLAYER
-// ═══════════════════════════════════════════════════════════════════════════════
-
 async function checkAndStartVideo() {
   try {
     const data = await STC.apiRequest(STC.API.LIVE_STATUS);
     state.delaySec = data.delaySec || 20;
-    
+
     const minSegments = Math.ceil(state.delaySec / 2) + 1;
-    
+
     if (data.manifest && data.segmentCount >= minSegments) {
       createPlayer();
     } else if (data.running) {
@@ -484,14 +465,14 @@ async function checkAndStartVideo() {
 
 function createPlayer() {
   if (state.hls) state.hls.destroy();
-  
+
   state.hls = new STC.HlsPlayerManager(el.video, {
     liveSyncDurationCount: 3,
     liveMaxLatencyDurationCount: 6,
     maxBufferLength: 30,
     maxMaxBufferLength: 60,
   });
-  
+
   state.hls.load(STC.HLS.DELAYED, () => {
     el.waitingScreen.classList.add('hidden');
   }, () => {
@@ -500,13 +481,9 @@ function createPlayer() {
   });
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CAPTION DISPLAY
-// ═══════════════════════════════════════════════════════════════════════════════
-
 function displayFullCaption(text) {
   console.log(`[Caption] Full text: "${text.slice(0, 50)}..."`);
-  
+
   const id = 'legacy_' + Date.now();
   state.activeCaptions.set(id, {
     words: text.split(/\s+/),
@@ -514,16 +491,16 @@ function displayFullCaption(text) {
     displayedAt: Date.now(),
     complete: true,
   });
-  
+
   cleanupOldCaptions();
   renderCaptions();
 }
 
 function displayWord(caption) {
   const { id, word, wordIndex, totalWords, isLast, slotDurationMs } = caption;
-  
+
   let entry = state.activeCaptions.get(id);
-  
+
   if (!entry) {
     entry = {
       words: new Array(totalWords).fill(''),
@@ -535,33 +512,33 @@ function displayWord(caption) {
     state.activeCaptions.set(id, entry);
     console.log(`[Caption] New caption started (${totalWords} words)`);
   }
-  
+
   entry.words[wordIndex] = word;
-  
+
   if (isLast) {
     entry.complete = true;
     entry.completedAt = Date.now();
     console.log(`[Caption] Caption complete: "${entry.words.join(' ')}"`);
-    
+
     setTimeout(() => {
       state.activeCaptions.delete(id);
       renderCaptions();
     }, state.captionDuration);
   }
-  
+
   cleanupOldCaptions();
   renderCaptions();
 }
 
 function cleanupOldCaptions() {
   const now = Date.now();
-  
+
   for (const [id, entry] of state.activeCaptions) {
     if (entry.complete && entry.completedAt && (now - entry.completedAt > state.captionDuration)) {
       state.activeCaptions.delete(id);
     }
   }
-  
+
   while (state.activeCaptions.size > state.maxDisplayed) {
     const firstKey = state.activeCaptions.keys().next().value;
     state.activeCaptions.delete(firstKey);
@@ -574,24 +551,24 @@ function renderCaptions() {
     el.captionDisplay.innerHTML = '';
     return;
   }
-  
+
   const lines = [];
-  
+
   for (const [id, entry] of state.activeCaptions) {
     const displayWords = entry.words.filter(w => w !== '');
-    
+
     if (displayWords.length > 0) {
       const text = displayWords.join(' ');
       lines.push(`<div class="caption-line">${STC.escapeHtml(text)}</div>`);
     }
   }
-  
+
   if (lines.length === 0) {
     el.captionDisplay.classList.remove('visible');
     el.captionDisplay.innerHTML = '';
     return;
   }
-  
+
   el.captionDisplay.innerHTML = lines.join('');
   el.captionDisplay.classList.add('visible');
 }

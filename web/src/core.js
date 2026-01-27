@@ -292,6 +292,9 @@ export const config = {
   usersCsvPath: path.join(ROOT, 'data', 'users.csv'),
   sessionsCsvPath: path.join(ROOT, 'data', 'sessions.csv'),
   jwtSecret: process.env.JWT_SECRET || 'CHANGE_ME_IN_ENV',
+  adminEmail: process.env.ADMIN_EMAIL || 'admin@gmail.com',
+  adminPassword: process.env.ADMIN_PASSWORD || '123456',
+  currentSource: null,
 };
 
 export const state = {

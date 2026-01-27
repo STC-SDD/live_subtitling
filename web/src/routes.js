@@ -561,8 +561,8 @@ router.get('/api/captions', (req, res) => {
 
 router.get('/api/live/status', (req, res) => {
   const hls = services.getHlsStatus();
-  const currentSession = state.currentSessionId 
-    ? sessionStore.findSessionById(state.currentSessionId) 
+  const currentSession = state.currentSessionId
+    ? sessionStore.findSessionById(state.currentSessionId)
     : null;
 
   res.json({
@@ -665,9 +665,9 @@ router.post('/api/live/start', async (req, res) => {
 
 router.post('/api/live/stop', (req, res) => {
   const sessionId = state.currentSessionId;
-  
+
   services.stopLive();
-  
+
   // Update session status
   if (sessionId) {
     try {
@@ -854,5 +854,36 @@ router.post('/api/auth/login', async (req, res) => {
     res.status(500).json({ error: 'Login failed' });
   }
 });
+
+router.post('/api/admin/login', (req, res) => {
+  const { email, password } = req.body || {};
+  if (email !== config.adminEmail || password !== config.adminPassword) {
+    return res.status(401).json({ error: 'Identifiants invalides' });
+  }
+
+  const token = jwt.sign(
+    { sub: 'admin', email: config.adminEmail, role: 'admin' },
+    config.jwtSecret,
+    { expiresIn: '7d' }
+  );
+
+  res.json({ ok: true, token });
+});
+
+function requireAdmin(req, res, next) {
+  const auth = req.headers.authorization || '';
+  const m = auth.match(/^Bearer\s+(.+)$/i);
+  if (!m) return res.status(401).json({ error: 'ADMIN_AUTH_REQUIRED' });
+
+  try {
+    const payload = jwt.verify(m[1], config.jwtSecret);
+    if (payload.role !== 'admin') return res.status(403).json({ error: 'FORBIDDEN' });
+    req.admin = payload;
+    next();
+  } catch {
+    return res.status(401).json({ error: 'INVALID_TOKEN' });
+  }
+}
+
 
 export default router;

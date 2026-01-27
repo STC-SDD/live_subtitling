@@ -272,7 +272,7 @@
         </div>
 
         <div class="links">
-            <a href="/admin.html">← Retour à l'administration</a>
+            <a href="/">← Retour</a>
         </div>
     </div>
 
@@ -379,10 +379,29 @@
             }
         }
 
+
+
+        // --- Admin auth guard + helper ---
+        const ADMIN_TOKEN = localStorage.getItem('stc_admin_token');
+        if (!ADMIN_TOKEN) {
+            location.replace('/admin-login.html');
+        }
+
+        function adminApi(url, options = {}) {
+            return STC.apiRequest(url, {
+                ...options,
+                headers: {
+                    ...(options.headers || {}),
+                    Authorization: `Bearer ${ADMIN_TOKEN}`,
+                },
+            });
+        }
+
         // Load sessions
         async function loadSessions() {
             try {
-                const data = await STC.apiRequest('/api/sessions');
+                // const data = await STC.apiRequest('/api/sessions');
+                const data = await adminApi('/api/sessions');
                 const sessions = data.sessions || [];
 
                 if (sessions.length === 0) {
@@ -453,7 +472,7 @@
             }
 
             try {
-                await STC.apiRequest('/api/sessions', {
+                await adminApi('/api/sessions', {
                     method: 'POST',
                     body: JSON.stringify({
                         id,
@@ -483,7 +502,7 @@
             if (!confirm(`Supprimer la session ${id} ?`)) return;
 
             try {
-                await STC.apiRequest(`/api/sessions/${id}`, { method: 'DELETE' });
+                await adminApi(`/api/sessions/${id}`, { method: 'DELETE' });
                 loadSessions();
             } catch (e) {
                 alert('Erreur: ' + e.message);

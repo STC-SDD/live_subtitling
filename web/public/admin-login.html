@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Login</title>
+</head>
+
+<body>
+    <h2>Admin login</h2>
+
+    <form id="form">
+        <label>Email</label><br>
+        <input id="email" type="email" required /><br><br>
+
+        <label>Password</label><br>
+        <input id="password" type="password" required /><br><br>
+
+        <button type="submit">Sign in</button>
+    </form>
+
+    <div id="err" style="color:red;margin-top:10px;"></div>
+
+    <script src="/js/shared.js"></script>
+    <script>
+        const token = localStorage.getItem("stc_admin_token");
+        if (token) location.href = "/admin-sessions.html";
+
+        document.getElementById("form").addEventListener("submit", async (e) => {
+            e.preventDefault();
+            document.getElementById("err").textContent = "";
+
+            const email = document.getElementById("email").value.trim();
+            const password = document.getElementById("password").value;
+
+            try {
+                const res = await STC.apiRequest("/api/admin/login", {
+                    method: "POST",
+                    body: JSON.stringify({ email, password })
+                });
+                localStorage.setItem("stc_admin_token", res.token);
+                location.href = "/admin-sessions.html";
+            } catch (e) {
+                document.getElementById("err").textContent = e.message;
+            }
+        });
+
+
+        function adminApi(url, options = {}) {
+            return STC.apiRequest(url, {
+                ...options,
+                headers: { ...(options.headers || {}), Authorization: `Bearer ${token}` }
+            });
+        }
+    </script>
+</body>
+
+</html>

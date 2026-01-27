@@ -1,8 +1,9 @@
 <!doctype html>
 <!--
-  ROLE — Subtitler entry page (login + choice: session or free mode)
+  ROLE — Subtitler entry page (login + session required)
 -->
 <html lang="fr">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -134,23 +135,6 @@
       margin-top: 8px;
     }
 
-    .divider {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin: 20px 0;
-      color: #444;
-      font-size: 0.8em;
-    }
-
-    .divider::before,
-    .divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: #2a2a2a;
-    }
-
     .error {
       color: #e74c3c;
       font-size: 0.8em;
@@ -212,57 +196,9 @@
     .hidden {
       display: none;
     }
-
-    .mode-choice {
-      display: grid;
-      gap: 12px;
-    }
-
-    .mode-card {
-      background: #151515;
-      border: 2px solid #2a2a2a;
-      border-radius: 8px;
-      padding: 16px;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .mode-card:hover {
-      border-color: #3a3a3a;
-      background: #1a1a1a;
-    }
-
-    .mode-card h3 {
-      font-size: 0.95em;
-      margin-bottom: 6px;
-      color: #fff;
-    }
-
-    .mode-card p {
-      font-size: 0.8em;
-      color: #666;
-      margin: 0;
-    }
-
-    .mode-card.session {
-      border-color: rgba(46, 204, 113, 0.3);
-    }
-
-    .mode-card.session:hover {
-      border-color: #2ecc71;
-      background: rgba(46, 204, 113, 0.05);
-    }
-
-    .mode-card.free {
-      border-color: rgba(52, 152, 219, 0.3);
-    }
-
-    .mode-card.free:hover {
-      border-color: #3498db;
-      background: rgba(52, 152, 219, 0.05);
-    }
   </style>
 </head>
+
 <body>
   <div class="container">
     <div class="header">
@@ -274,29 +210,19 @@
     <div class="card" id="loginCard">
       <div class="card-title">Connexion</div>
       <div class="card-description">
-        Connectez-vous pour accéder au sous-titrage.
+        Connectez-vous pour accéder aux sessions de sous-titrage.
       </div>
-      
+
       <div class="input-group">
         <label for="loginEmail">Email</label>
-        <input 
-          type="email" 
-          id="loginEmail" 
-          placeholder="votre@email.com"
-          autocomplete="email"
-        />
+        <input type="email" id="loginEmail" placeholder="votre@email.com" autocomplete="email" />
       </div>
 
       <div class="input-group">
         <label for="loginPassword">Mot de passe</label>
-        <input 
-          type="password" 
-          id="loginPassword" 
-          placeholder="••••••••"
-          autocomplete="current-password"
-        />
+        <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password" />
       </div>
-      
+
       <button class="btn btn-primary" id="loginBtn">
         Se connecter
       </button>
@@ -304,70 +230,35 @@
       <button class="btn btn-secondary" id="showSignupBtn">
         Créer un compte
       </button>
-      
+
       <div class="error" id="loginError"></div>
     </div>
 
-    <!-- Mode Choice Card (shown after login) -->
-    <div class="card hidden" id="modeCard">
-      <div id="userInfoDisplay"></div>
-
-      <div class="card-title">Choisissez votre mode</div>
-      <div class="card-description">
-        Rejoignez une session programmée ou travaillez en mode libre.
-      </div>
-
-      <div class="mode-choice">
-        <div class="mode-card session" id="sessionModeBtn">
-          <h3>📋 Mode Session</h3>
-          <p>Rejoindre une session avec code</p>
-        </div>
-
-        <div class="mode-card free" id="freeModeBtn">
-          <h3>🎯 Mode Libre</h3>
-          <p>Accès direct au live actif</p>
-        </div>
-      </div>
-
-      <button class="btn btn-logout" id="logoutBtn1">
-        Se déconnecter
-      </button>
-    </div>
-
-    <!-- Session Access Card -->
+    <!-- Session Access Card (shown after login) -->
     <div class="card hidden" id="sessionCard">
-      <div id="userInfoDisplay2"></div>
+      <div id="userInfoDisplay"></div>
 
       <div class="card-title">Code de session</div>
       <div class="card-description">
-        Entrez le code fourni par l'administrateur.
+        Entrez le code fourni par l'administrateur pour rejoindre la session.
       </div>
-      
+
       <div class="input-group">
         <label for="sessionCode">Code de session</label>
-        <input 
-          type="text" 
-          id="sessionCode" 
-          placeholder="Ex: SESSION-001"
-          style="text-transform: uppercase;"
-          autocomplete="off"
-        />
+        <input type="text" id="sessionCode" placeholder="Ex: SESSION-001" style="text-transform: uppercase;"
+          autocomplete="off" />
       </div>
-      
+
       <div id="sessionInfo"></div>
-      
+
       <button class="btn btn-primary" id="joinSessionBtn">
         Rejoindre la session
       </button>
 
-      <button class="btn btn-secondary" id="backToModeBtn">
-        ← Retour
-      </button>
-
-      <button class="btn btn-logout" id="logoutBtn2">
+      <button class="btn btn-logout" id="logoutBtn">
         Se déconnecter
       </button>
-      
+
       <div class="error" id="sessionError"></div>
     </div>
 
@@ -381,7 +272,6 @@
     const el = {
       headerSubtext: document.getElementById('headerSubtext'),
       loginCard: document.getElementById('loginCard'),
-      modeCard: document.getElementById('modeCard'),
       sessionCard: document.getElementById('sessionCard'),
       loginEmail: document.getElementById('loginEmail'),
       loginPassword: document.getElementById('loginPassword'),
@@ -389,14 +279,9 @@
       showSignupBtn: document.getElementById('showSignupBtn'),
       loginError: document.getElementById('loginError'),
       userInfoDisplay: document.getElementById('userInfoDisplay'),
-      userInfoDisplay2: document.getElementById('userInfoDisplay2'),
-      sessionModeBtn: document.getElementById('sessionModeBtn'),
-      freeModeBtn: document.getElementById('freeModeBtn'),
       sessionCode: document.getElementById('sessionCode'),
       joinSessionBtn: document.getElementById('joinSessionBtn'),
-      backToModeBtn: document.getElementById('backToModeBtn'),
-      logoutBtn1: document.getElementById('logoutBtn1'),
-      logoutBtn2: document.getElementById('logoutBtn2'),
+      logoutBtn: document.getElementById('logoutBtn'),
       sessionError: document.getElementById('sessionError'),
       sessionInfo: document.getElementById('sessionInfo'),
     };
@@ -407,11 +292,11 @@
     // Check if already logged in
     function checkAuth() {
       const token = localStorage.getItem('stc_token');
-      
+
       if (token) {
         try {
           const payload = JSON.parse(atob(token.split('.')[1]));
-          
+
           if (payload.exp && payload.exp * 1000 < Date.now()) {
             localStorage.removeItem('stc_token');
             showLoginCard();
@@ -423,7 +308,7 @@
             email: payload.email,
           };
 
-          showModeCard();
+          showSessionCard();
         } catch (e) {
           localStorage.removeItem('stc_token');
           showLoginCard();
@@ -436,37 +321,17 @@
     // Show login card
     function showLoginCard() {
       el.loginCard.classList.remove('hidden');
-      el.modeCard.classList.add('hidden');
       el.sessionCard.classList.add('hidden');
       el.headerSubtext.textContent = 'Connexion requise';
-    }
-
-    // Show mode choice card
-    function showModeCard() {
-      el.loginCard.classList.add('hidden');
-      el.modeCard.classList.remove('hidden');
-      el.sessionCard.classList.add('hidden');
-      el.headerSubtext.textContent = 'Choisissez votre mode';
-
-      const userInfoHtml = `
-        <div class="user-info">
-          <div>
-            <div class="name">${STC.escapeHtml(currentUser.name)}</div>
-            <div class="email">${STC.escapeHtml(currentUser.email)}</div>
-          </div>
-        </div>
-      `;
-      el.userInfoDisplay.innerHTML = userInfoHtml;
     }
 
     // Show session card
     function showSessionCard() {
       el.loginCard.classList.add('hidden');
-      el.modeCard.classList.add('hidden');
       el.sessionCard.classList.remove('hidden');
       el.headerSubtext.textContent = 'Code de session';
 
-      const userInfoHtml = `
+      el.userInfoDisplay.innerHTML = `
         <div class="user-info">
           <div>
             <div class="name">${STC.escapeHtml(currentUser.name)}</div>
@@ -474,7 +339,6 @@
           </div>
         </div>
       `;
-      el.userInfoDisplay2.innerHTML = userInfoHtml;
 
       el.sessionCode.focus();
     }
@@ -505,7 +369,7 @@
         if (data.token) {
           localStorage.setItem('stc_token', data.token);
           currentUser = data.user;
-          showModeCard();
+          showSessionCard();
         }
       } catch (e) {
         el.loginError.textContent = e.message || 'Erreur de connexion';
@@ -523,12 +387,6 @@
       el.sessionCode.value = '';
       el.sessionInfo.innerHTML = '';
       showLoginCard();
-    }
-
-    // Free mode - go directly to subtitler
-    function handleFreeMode() {
-      localStorage.removeItem('stc_session_id'); // Clear any previous session
-      location.replace('/subtitler.html');
     }
 
     // Check session code validity
@@ -567,9 +425,9 @@
     // Join session
     async function handleJoinSession() {
       el.sessionError.textContent = '';
-      
+
       const code = el.sessionCode.value.trim().toUpperCase();
-      
+
       if (!code) {
         el.sessionError.textContent = 'Veuillez entrer un code de session';
         return;
@@ -586,7 +444,7 @@
 
     // Event listeners
     el.loginBtn.addEventListener('click', handleLogin);
-    
+
     el.loginPassword.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') handleLogin();
     });
@@ -595,16 +453,10 @@
       location.href = '/signup.html';
     });
 
-    el.sessionModeBtn.addEventListener('click', showSessionCard);
-    el.freeModeBtn.addEventListener('click', handleFreeMode);
-    
-    el.backToModeBtn.addEventListener('click', showModeCard);
-
-    el.logoutBtn1.addEventListener('click', handleLogout);
-    el.logoutBtn2.addEventListener('click', handleLogout);
+    el.logoutBtn.addEventListener('click', handleLogout);
 
     el.joinSessionBtn.addEventListener('click', handleJoinSession);
-    
+
     el.sessionCode.addEventListener('input', () => {
       const code = el.sessionCode.value.trim().toUpperCase();
       el.sessionCode.value = code;
@@ -614,7 +466,7 @@
     });
 
     el.sessionCode.addEventListener('blur', checkSession);
-    
+
     el.sessionCode.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') {
         handleJoinSession();
@@ -625,4 +477,5 @@
     checkAuth();
   </script>
 </body>
+
 </html>

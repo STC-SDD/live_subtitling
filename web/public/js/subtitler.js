@@ -449,6 +449,9 @@
 /**
  * ROLE — Subtitler UI controller (browser) with session or free mode
  */
+/**
+ * ROLE — Subtitler UI controller (session required)
+ */
 
 const state = {
   ws: null,
@@ -466,13 +469,11 @@ const state = {
   history: [],
   notifySound: null,
   sessionId: null,
-  isFreeMode: false,
 };
 
 const el = {};
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Cache elements
   el.statusDisplay = document.getElementById('statusDisplay');
   el.video = document.getElementById('video');
   el.videoStatus = document.getElementById('videoStatus');
@@ -489,7 +490,6 @@ document.addEventListener('DOMContentLoaded', () => {
   el.sessionInfo = document.getElementById('sessionInfo');
   el.logoutBtn = document.getElementById('logoutBtn');
 
-  // Logout button handler
   el.logoutBtn?.addEventListener('click', () => {
     localStorage.removeItem('stc_token');
     localStorage.removeItem('stc_session_id');
@@ -503,21 +503,16 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  // Check mode: session or free
+  // Session gate - must have session ID
   const sessionId = localStorage.getItem('stc_session_id');
-  
-  if (sessionId) {
-    // Session mode
-    state.sessionId = sessionId;
-    state.isFreeMode = false;
-    loadSessionInfo();
-  } else {
-    // Free mode
-    state.isFreeMode = true;
-    displayFreeMode();
+  if (!sessionId) {
+    location.replace('/subtitler-entry.html');
+    return;
   }
 
-  // Create audio context on first user interaction
+  state.sessionId = sessionId;
+  loadSessionInfo();
+
   const armAudio = () => {
     if (!state.notifySound) state.notifySound = createNotifySound();
     document.removeEventListener('click', armAudio);
@@ -529,20 +524,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initApp();
 });
 
-// Display free mode info
-function displayFreeMode() {
-  if (el.sessionInfo) {
-    el.sessionInfo.innerHTML = `
-      <div style="background:rgba(52,152,219,0.05);border:1px solid rgba(52,152,219,0.2);border-radius:4px;padding:10px;margin-bottom:12px;">
-        <div style="font-size:0.75em;color:#666;margin-bottom:2px;">Mode</div>
-        <div style="font-weight:600;font-size:0.9em;color:#3498db;">🎯 Mode Libre</div>
-        <div style="font-size:0.8em;color:#888;">Accès direct au live</div>
-      </div>
-    `;
-  }
-}
-
-// Load session info
 async function loadSessionInfo() {
   try {
     const data = await STC.apiRequest(`/api/sessions/${state.sessionId}`);
@@ -559,12 +540,10 @@ async function loadSessionInfo() {
     }
   } catch (e) {
     console.error('Failed to load session:', e);
-    // If session not found, switch to free mode
     if (e.message.includes('404') || e.message.includes('not found')) {
+      alert('Session invalide');
       localStorage.removeItem('stc_session_id');
-      state.sessionId = null;
-      state.isFreeMode = true;
-      displayFreeMode();
+      location.replace('/subtitler-entry.html');
     }
   }
 }
@@ -574,7 +553,6 @@ function initApp() {
   setupEvents();
 }
 
-// Audio notifications
 function createNotifySound() {
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -603,7 +581,6 @@ function createNotifySound() {
   };
 }
 
-// WebSocket
 function initWebSocket() {
   state.ws = new STC.WebSocketManager(handleMessage, onConnected, onDisconnected);
   state.ws.connect();
@@ -613,12 +590,7 @@ function onConnected() {
   updateStatus('connected');
 
   const token = localStorage.getItem('stc_token');
-  
-  // Send token and sessionId (can be null for free mode)
-  state.ws.identify(STC.CLIENT_TYPES.SUBTITLER, { 
-    token, 
-    sessionId: state.sessionId || null 
-  });
+  state.ws.identify(STC.CLIENT_TYPES.SUBTITLER, { token, sessionId: state.sessionId });
 }
 
 function onDisconnected() {
@@ -631,8 +603,7 @@ function handleMessage(msg) {
       state.odId = msg.odId;
       state.isLive = msg.running;
       state.fragmentMode = msg.fragmentMode;
-      
-      // Get user name from token
+
       const token = localStorage.getItem('stc_token');
       if (token) {
         try {
@@ -716,7 +687,7 @@ function handleMessage(msg) {
         addToHistory(msg.caption.text, msg.caption.subtitlerName, true);
       }
       break;
-      
+
     case 'error':
       if (msg.error === 'AUTH_REQUIRED' || msg.error === 'INVALID_TOKEN') {
         alert('Session expirée. Veuillez vous reconnecter.');
@@ -735,7 +706,6 @@ function handleMessage(msg) {
   }
 }
 
-// Status
 function updateStatus(status) {
   el.statusDisplay.classList.remove('live');
 
@@ -749,7 +719,6 @@ function updateStatus(status) {
   }
 }
 
-// Turn UI
 function updateTurnUI() {
   if (!state.fragmentMode) {
     el.turnIndicator.classList.remove('active', 'your-turn', 'waiting', 'grace');
@@ -787,7 +756,6 @@ function updateTurnUI() {
   el.turnProgress.style.width = `${(state.secondsRemaining / totalTime) * 100}%`;
 }
 
-// Video
 async function checkAndStartVideo() {
   try {
     const data = await STC.apiRequest(STC.API.LIVE_STATUS);
@@ -820,7 +788,6 @@ function createPlayer() {
   });
 }
 
-// Events
 function setupEvents() {
   el.captionInput.addEventListener('input', updateCharCount);
   el.captionInput.addEventListener('keypress', e => {
