@@ -1,0 +1,279 @@
+<!doctype html>
+<!--
+  ROLE — Spectator entry page (session required)
+-->
+<html lang="fr">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spectateur — Accès</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #111;
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .container {
+            max-width: 420px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .header h1 {
+            font-size: 1.3em;
+            font-weight: 500;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 0.85em;
+        }
+
+        .card {
+            background: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 10px;
+            padding: 24px;
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 0.9em;
+            font-weight: 500;
+            margin-bottom: 12px;
+            color: #aaa;
+        }
+
+        .card-description {
+            font-size: 0.8em;
+            color: #666;
+            margin-bottom: 16px;
+            line-height: 1.4;
+        }
+
+        .input-group {
+            margin-bottom: 12px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: #888;
+            font-size: 0.8em;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 12px 14px;
+            background: #151515;
+            border: 1px solid #2a2a2a;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 0.95em;
+            transition: border-color 0.15s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #3a3a3a;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px 18px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9em;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .btn-primary {
+            background: #9b59b6;
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            filter: brightness(0.9);
+        }
+
+        .session-info {
+            background: rgba(155, 89, 182, 0.05);
+            border: 1px solid rgba(155, 89, 182, 0.2);
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 0.85em;
+        }
+
+        .session-info strong {
+            color: #9b59b6;
+        }
+
+        .error {
+            color: #e74c3c;
+            font-size: 0.8em;
+            margin-top: 8px;
+            min-height: 20px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 24px;
+        }
+
+        .footer a {
+            color: #666;
+            text-decoration: none;
+            font-size: 0.85em;
+            transition: color 0.15s;
+        }
+
+        .footer a:hover {
+            color: #888;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Spectateur</h1>
+            <p>Code de session requis</p>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Rejoindre une session</div>
+            <div class="card-description">
+                Entrez le code de session fourni pour regarder le live.
+            </div>
+
+            <div class="input-group">
+                <label for="sessionCode">Code de session</label>
+                <input type="text" id="sessionCode" placeholder="Ex: SESSION-001" style="text-transform: uppercase;"
+                    autocomplete="off" />
+            </div>
+
+            <div id="sessionInfo"></div>
+
+            <button class="btn btn-primary" id="joinSessionBtn">
+                Regarder la session
+            </button>
+
+            <div class="error" id="sessionError"></div>
+        </div>
+
+        <div class="footer">
+            <a href="/">← Retour à l'accueil</a>
+        </div>
+    </div>
+
+    <script src="/js/shared.js"></script>
+    <script>
+        const el = {
+            sessionCode: document.getElementById('sessionCode'),
+            joinSessionBtn: document.getElementById('joinSessionBtn'),
+            sessionError: document.getElementById('sessionError'),
+            sessionInfo: document.getElementById('sessionInfo'),
+        };
+
+        let currentSession = null;
+
+        // Check session code validity
+        async function checkSession() {
+            const code = el.sessionCode.value.trim().toUpperCase();
+            if (!code) return;
+
+            try {
+                const data = await STC.apiRequest(`/api/sessions/${code}`);
+                currentSession = data.session;
+
+                if (currentSession.status === 'ended') {
+                    el.sessionInfo.innerHTML = '';
+                    el.sessionError.textContent = 'Cette session est terminée';
+                    return;
+                }
+
+                el.sessionInfo.innerHTML = `
+          <div class="session-info">
+            <strong>${STC.escapeHtml(currentSession.title)}</strong><br>
+            <span style="color:#888;">Statut: ${currentSession.status === 'active' ? 'En cours' : 'Programmée'}</span>
+          </div>
+        `;
+                el.sessionError.textContent = '';
+            } catch (e) {
+                el.sessionInfo.innerHTML = '';
+                if (e.message.includes('404') || e.message.includes('not found')) {
+                    el.sessionError.textContent = 'Code de session invalide';
+                } else {
+                    el.sessionError.textContent = 'Erreur de connexion';
+                }
+                currentSession = null;
+            }
+        }
+
+        // Join session
+        async function handleJoinSession() {
+            el.sessionError.textContent = '';
+
+            const code = el.sessionCode.value.trim().toUpperCase();
+
+            if (!code) {
+                el.sessionError.textContent = 'Veuillez entrer un code de session';
+                return;
+            }
+
+            if (!currentSession) {
+                await checkSession();
+                if (!currentSession) return;
+            }
+
+            localStorage.setItem('spectator_session_id', code);
+            location.replace('/spectator.html');
+        }
+
+        // Event listeners
+        el.joinSessionBtn.addEventListener('click', handleJoinSession);
+
+        el.sessionCode.addEventListener('input', () => {
+            const code = el.sessionCode.value.trim().toUpperCase();
+            el.sessionCode.value = code;
+            currentSession = null;
+            el.sessionInfo.innerHTML = '';
+            el.sessionError.textContent = '';
+        });
+
+        el.sessionCode.addEventListener('blur', checkSession);
+
+        el.sessionCode.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                handleJoinSession();
+            }
+        });
+
+        // Focus on input
+        el.sessionCode.focus();
+    </script>
+</body>
+
+</html>
