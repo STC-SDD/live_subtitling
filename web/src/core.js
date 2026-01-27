@@ -6,6 +6,14 @@
  * - Mutable runtime state (FFmpeg process, live start time, delay, fragment session)
  *
  * Other backend modules import `config` and `state` from here to avoid circular deps.
+ *
+ * ✅ Multi-pool extension (non-breaking):
+ * - Keeps existing exports: config, state, resetFragment(), clearTimers(), isLiveRunning(), getLiveTimestamp(), log
+ * - Adds: sessions, getSession(poolId), createSession(poolId), deleteSession(poolId), listSessions()
+ *
+ * IMPORTANT:
+ * - Existing code that uses `state` continues to work (default pool).
+ * - New multi-pool code can start using sessions via getSession(poolId).
  */
 
 import path from 'path';
@@ -70,13 +78,15 @@ export const config = {
     audioBitrate: '128k',       // Audio bitrate
     audioSampleRate: 44100,     // Sampling rate
   },
+
+  // ─── Auth / Data ────────────────────────────────────────────────────────────
   dataDir: path.join(ROOT, 'data'),
   usersCsvPath: path.join(ROOT, 'data', 'users.csv'),
   jwtSecret: process.env.JWT_SECRET || 'CHANGE_ME_IN_ENV',
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MUTABLE STATE (changes during runtime)
+// MUTABLE STATE (changes during runtime) — DEFAULT (legacy single-pool state)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 export const state = {
@@ -104,6 +114,7 @@ export const state = {
     subtitlers: new Map(),                  // Map<odId, { id, name, ws, joinedAt }>
     currentSlotIndex: 0,                    // Current slot index
     slotStartTime: null,                    // Current slot start timestamp
+
     // Legacy single-slot timers (kept for compatibility; unused in overlapping scheduler)
     slotTimer: null,                        // Slot end timer
     notifyTimer: null,                      // Notification timer
@@ -112,49 +123,146 @@ export const state = {
     // Overlapping scheduler
     schedulerTimer: null,                   // Interval that starts new slots every (slotDuration - overlap)
     slotTimers: new Set(),                  // Set<Timeout> for per-slot timers (ending/grace/auto-send)
-    openSlotBySubtitlerId: new Map(),      // Map<subtitlerId, slotIndex> currently open for submissions
+    openSlotBySubtitlerId: new Map(),       // Map<subtitlerId, slotIndex> currently open for submissions
     captionsBySlot: [],                     // Array of slots with raw captions
     fusedCaptions: [],                      // Captions after fusion
   },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// STATE UTILITIES
+// MULTI-POOL EXTENSION (non-breaking)
+// Each pool/session has its own state. Default pool mirrors `state`.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * sessions: Map<poolId, sessionState>
+ * - "default" pool points to the legacy `state` object for compatibility.
+ */
+export const sessions = new Map();
+sessions.set('default', state);
+
+/**
+ * Create a fresh session state (new pool) with the same shape as `state`.
+ * IMPORTANT: Keep properties identical to avoid breaking services/websocket when migrated.
+ */
+export function createSession(poolId, overrides = {}) {
+  const s = {
+    ffmpegProc: null,
+    liveStartedAt: null,
+
+    captions: [],
+
+    currentMode: null,
+    delaySec: overrides.delaySec ?? config.defaultDelay,
+    minSubtitlersRequired: overrides.minSubtitlersRequired ?? config.minSubtitlers,
+
+    fragment: {
+      active: false,
+      slotDuration: overrides.slotDuration ?? config.defaultSlotDuration,
+      overlapDuration: overrides.overlapDuration ?? config.defaultOverlapDuration,
+      notifyBefore: overrides.notifyBefore ?? config.defaultNotifyBefore,
+      gracePeriodPercent: overrides.gracePeriodPercent ?? 20,
+      requiredSubtitlers: overrides.requiredSubtitlers ?? 2,
+
+      subtitlers: new Map(),
+      currentSlotIndex: 0,
+      slotStartTime: null,
+
+      slotTimer: null,
+      notifyTimer: null,
+      graceTimer: null,
+
+      schedulerTimer: null,
+      slotTimers: new Set(),
+      openSlotBySubtitlerId: new Map(),
+      captionsBySlot: [],
+      fusedCaptions: [],
+    },
+  };
+
+  // helpful metadata (optional, not used by old code)
+  s.poolId = poolId;
+
+  return s;
+}
+
+/**
+ * Get a session state by poolId (creates it if missing).
+ * Existing code can keep using `state` (default pool).
+ */
+export function getSession(poolId = 'default') {
+  if (!poolId) poolId = 'default';
+  if (!sessions.has(poolId)) {
+    sessions.set(poolId, createSession(poolId));
+  }
+  return sessions.get(poolId);
+}
+
+/**
+ * List current pools (for debug / admin)
+ */
+export function listSessions() {
+  return Array.from(sessions.keys());
+}
+
+/**
+ * Delete a session (pool) with safe timer cleanup.
+ * Does not delete the default pool.
+ */
+export function deleteSession(poolId) {
+  if (!poolId || poolId === 'default') return false;
+  const s = sessions.get(poolId);
+  if (!s) return false;
+
+  // Clean all fragment timers for that session
+  clearTimers(s);
+
+  // Stop ffmpeg if still running (only if your services stop logic isn't called)
+  // NOTE: We do NOT kill here to avoid side-effects; services.js should handle stop.
+  sessions.delete(poolId);
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STATE UTILITIES (default: legacy `state`, but can work with a given session)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
  * Check if live streaming is running
  * @returns {boolean} true if FFmpeg is active
  */
-export const isLiveRunning = () => state.ffmpegProc !== null;
+export const isLiveRunning = (s = state) => s.ffmpegProc !== null;
 
 /**
  * Get current video timestamp (milliseconds since live start)
  * @returns {number|null} Timestamp in ms, or null if no live
  */
-export const getLiveTimestamp = () =>
-  state.liveStartedAt ? Date.now() - state.liveStartedAt : null;
+export const getLiveTimestamp = (s = state) =>
+  s.liveStartedAt ? Date.now() - s.liveStartedAt : null;
 
 /**
  * Fully reset fragment mode state
  * Called when stopping live or fragment mode
- *//** Reset fragment session */
-export function resetFragment() {
-  if (state.fragment.slotTimer) clearTimeout(state.fragment.slotTimer);
-  if (state.fragment.notifyTimer) clearTimeout(state.fragment.notifyTimer);
-  if (state.fragment.graceTimer) clearTimeout(state.fragment.graceTimer);
-  if (state.fragment.schedulerTimer) {
-    clearInterval(state.fragment.schedulerTimer);
+ * Non-breaking: default resetFragment() still targets legacy `state`.
+ *
+ * @param {object} s session state (optional)
+ */
+export function resetFragment(s = state) {
+  if (!s?.fragment) return;
+
+  if (s.fragment.slotTimer) clearTimeout(s.fragment.slotTimer);
+  if (s.fragment.notifyTimer) clearTimeout(s.fragment.notifyTimer);
+  if (s.fragment.graceTimer) clearTimeout(s.fragment.graceTimer);
+  if (s.fragment.schedulerTimer) clearInterval(s.fragment.schedulerTimer);
+
+  if (s.fragment.slotTimers && s.fragment.slotTimers.size) {
+    for (const t of s.fragment.slotTimers) clearTimeout(t);
   }
 
-  if (state.fragment.slotTimers && state.fragment.slotTimers.size) {
-    for (const t of state.fragment.slotTimers) clearTimeout(t);
-  }
+  const prevGrace = s.fragment.gracePeriodPercent;
+  const prevRequired = s.fragment.requiredSubtitlers;
 
-  const prevGrace = state.fragment.gracePeriodPercent;
-  const prevRequired = state.fragment.requiredSubtitlers;
-
-  state.fragment = {
+  s.fragment = {
     active: false,
     slotDuration: config.defaultSlotDuration,
     overlapDuration: config.defaultOverlapDuration,
@@ -179,29 +287,33 @@ export function resetFragment() {
 /**
  * Clear all active timers for fragment mode
  * Used before restarting a slot or stopping the mode
+ *
+ * @param {object} s session state (optional)
  */
-export function clearTimers() {
-  if (state.fragment.slotTimer) {
-    clearTimeout(state.fragment.slotTimer);
-    state.fragment.slotTimer = null;
+export function clearTimers(s = state) {
+  if (!s?.fragment) return;
+
+  if (s.fragment.slotTimer) {
+    clearTimeout(s.fragment.slotTimer);
+    s.fragment.slotTimer = null;
   }
-  if (state.fragment.notifyTimer) {
-    clearTimeout(state.fragment.notifyTimer);
-    state.fragment.notifyTimer = null;
+  if (s.fragment.notifyTimer) {
+    clearTimeout(s.fragment.notifyTimer);
+    s.fragment.notifyTimer = null;
   }
-  if (state.fragment.graceTimer) {
-    clearTimeout(state.fragment.graceTimer);
-    state.fragment.graceTimer = null;
+  if (s.fragment.graceTimer) {
+    clearTimeout(s.fragment.graceTimer);
+    s.fragment.graceTimer = null;
   }
 
-  if (state.fragment.schedulerTimer) {
-    clearInterval(state.fragment.schedulerTimer);
-    state.fragment.schedulerTimer = null;
+  if (s.fragment.schedulerTimer) {
+    clearInterval(s.fragment.schedulerTimer);
+    s.fragment.schedulerTimer = null;
   }
 
-  if (state.fragment.slotTimers && state.fragment.slotTimers.size) {
-    for (const t of state.fragment.slotTimers) clearTimeout(t);
-    state.fragment.slotTimers.clear();
+  if (s.fragment.slotTimers && s.fragment.slotTimers.size) {
+    for (const t of s.fragment.slotTimers) clearTimeout(t);
+    s.fragment.slotTimers.clear();
   }
 }
 

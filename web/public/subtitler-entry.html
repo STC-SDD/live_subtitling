@@ -23,17 +23,23 @@
     <p>Connecte-toi ou crée un compte pour participer au sous-titrage.</p>
 
     <div class="grid">
-      <a class="primary" href="/login.html">Se connecter</a>
-      <a href="/signup.html">Créer un compte</a>
-      <a href="/">Retour</a>
-    </div>
-  </div>
+  <a class="primary" id="loginLink" href="/login.html">Se connecter</a>
+  <a id="signupLink" href="/signup.html">Créer un compte</a>
+  <a id="backLink" href="/">Retour</a>
+</div>
 
-  <script>
-    // Déjà connecté ? → on saute l’étape
-    if (localStorage.getItem('stc_token')) {
-      location.replace('/subtitler.html');
-    }
-  </script>
+<script>
+  // garde ?poolId=... quand on navigue
+  const qs = window.location.search || '';
+  document.getElementById('loginLink').href  = '/login.html'  + qs;
+  document.getElementById('signupLink').href = '/signup.html' + qs;
+  document.getElementById('backLink').href   = '/' + qs;
+
+  // Déjà connecté ? → on saute l’étape
+  if (localStorage.getItem('stc_token')) {
+    location.replace('/subtitler.html' + qs);
+  }
+</script>
+
 </body>
 </html>
