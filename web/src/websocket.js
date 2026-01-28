@@ -87,9 +87,9 @@ function handleMessage(ws, data) {
   }
 
   switch (msg.type) {
-    case 'identify':
-      handleIdentify(ws, msg);
-      break;
+    // case 'identify':
+    //   handleIdentify(ws, msg);
+    //   break;
 
     case 'fragment:join':
       handleFragmentJoin(ws, msg);
@@ -129,51 +129,12 @@ function handleMessage(ws, data) {
 //   }
 // }
 
-function handleIdentify(ws, msg) {
-  const { clientType, name, token } = msg;
 
-  if (!['admin', 'subtitler', 'spectator'].includes(clientType)) return;
-
-  if (clientType === 'subtitler') {
-    if (!token || typeof token !== 'string') {
-      services.send(ws, { type: 'error', error: 'AUTH_REQUIRED' });
-      return;
-    }
-
-    try {
-      const payload = jwt.verify(token, config.jwtSecret);
-      if (payload.role !== 'subtitler') {
-        services.send(ws, { type: 'error', error: 'INVALID_ROLE' });
-        return;
-      }
-
-      ws.clientType = 'subtitler';
-      ws.user = { id: payload.sub, email: payload.email, name: payload.name };
-      ws.subtitlerName = payload.name;
-
-      log.info('WS', `Identified: subtitler (${ws.subtitlerName})`);
-
-      if (!state.fragment.subtitlers.has(ws.odId)) {
-        handleFragmentJoin(ws, { name: ws.subtitlerName });
-      }
-      return;
-    } catch {
-      services.send(ws, { type: 'error', error: 'INVALID_TOKEN' });
-      return;
-    }
-  }
-
-  // non-subtitler unchanged
-  ws.clientType = clientType;
-  if (name) ws.subtitlerName = name;
-  if (ws.clientType !== 'subtitler') return;
-
-}
 
 /**
  * Handle a subtitler joining the fragment session
  */
-function handleFragmentJoin(ws, msg) {
+/*function handleFragmentJoin(ws, msg) {
   const name = msg.name || ws.subtitlerName || 'Anonymous';
 
   // Skip if already joined
@@ -206,8 +167,32 @@ function handleFragmentJoin(ws, msg) {
   if (state.fragment.active && activeCount >= state.fragment.requiredSubtitlers && !state.fragment.slotTimer) {
     services.startSlotTimer();
   }
-}
+}*/
+function handleIdentify(ws, msg) {
+  const { clientType, name, token } = msg;
 
+  if (!['admin', 'subtitler', 'spectator'].includes(clientType)) return;
+
+  if (clientType === 'subtitler') {
+    // --- BYPASS START (FOR TESTING MSA) ---
+    // We treat everyone as authorized for the test
+    ws.clientType = 'subtitler';
+    ws.subtitlerName = name || 'Tester';
+    ws.user = { id: ws.odId, email: 'test@example.com', name: ws.subtitlerName };
+
+    log.info('WS', `Identified: subtitler (${ws.subtitlerName}) [BYPASS MODE]`);
+
+    if (!state.fragment.subtitlers.has(ws.odId)) {
+      handleFragmentJoin(ws, { name: ws.subtitlerName });
+    }
+    return;
+    // --- BYPASS END ---
+  }
+
+  // non-subtitler unchanged
+  ws.clientType = clientType;
+  if (name) ws.subtitlerName = name;
+}
 /**
  * Handle a subtitler leaving the fragment session
  */

@@ -8,6 +8,8 @@
  * - Fuses consecutive slot texts (de-duplication) and schedules spectator captions
  * - Provides helper functions used by HTTP routes and WebSocket handlers
  */
+import nspell from 'nspell';
+
 
 import fs from 'fs';
 import path from 'path';
@@ -1261,6 +1263,59 @@ function storeFusedCaption(slot, text, nextSlot, overlapCount) {
     caption: fusedCaption,
     overlapCount: overlapCount || 0,
   });
+  // Load the dictionary files
+const aff = fs.readFileSync('././data/index.aff', 'utf-8');
+const dic = fs.readFileSync('././data/index.dic', 'utf-8');
+const spell = nspell(aff, dic);
+
+/**
+ * Real Dictionary Correction
+ * Checks if the word exists; if not, takes the top suggestion.
+ */
+function formalCorrect(tokens) {
+  return tokens.map(word => {
+    // On nettoie le mot (minuscules) pour augmenter les chances du dictionnaire
+    const cleanWord = word.toLowerCase();
+    const isCorrect = spell.correct(cleanWord);
+
+    if (!isCorrect) {
+      const suggestions = spell.suggest(cleanWord);
+      
+      if (suggestions.length > 0) {
+        // Log pour debug : voir ce que le dictionnaire propose
+        // console.log(`Dict suggest for "${word}":`, suggestions.slice(0, 3));
+        
+        // On prend la première suggestion (souvent celle avec l'accent correct)
+        return suggestions[0];
+      }
+    }
+    return word;
+  });
+}
+  
+// Assurez-vous que tokenize et detokenize sont définis au-dessus
+ function computeMSAConsensus(slot) {
+  if (!slot || !slot.captions || !slot.captions.length) return "";
+  
+  const versions = slot.captions.map(c => tokenize(c.text));
+  const maxLength = Math.max(...versions.map(v => v.length));
+  const resultTokens = [];
+
+  for (let i = 0; i < maxLength; i++) {
+    const frequency = {};
+    versions.forEach(tokens => {
+      const word = tokens[i];
+      if (word) frequency[word] = (frequency[word] || 0) + 1;
+    });
+
+    const winner = Object.keys(frequency).reduce((a, b) => 
+      (frequency[a] || 0) > (frequency[b] || 0) ? a : b, "");
+    
+    if (winner) resultTokens.push(winner);
+  }
+
+  return detokenize(resultTokens);
+}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
