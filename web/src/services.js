@@ -8,7 +8,7 @@
  */
 import nspell from 'nspell';
 
-
+import { pipeline } from '@xenova/transformers';
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
@@ -1185,32 +1185,59 @@ const spell = nspell(aff, dic);
  * Real Dictionary Correction
  * Checks if the word exists; if not, takes the top suggestion.
  */
-function formalCorrect(tokens) {
-  return tokens.map(word => {
-    // On nettoie le mot (minuscules) pour augmenter les chances du dictionnaire
-    const cleanWord = word.toLowerCase();
-    const isCorrect = spell.correct(cleanWord);
+// function formalCorrect(tokens) {
+//   return tokens.map(word => {
+//     // On nettoie le mot (minuscules) pour augmenter les chances du dictionnaire
+//     const cleanWord = word.toLowerCase();
+//     const isCorrect = spell.correct(cleanWord);
 
-    if (!isCorrect) {
-      const suggestions = spell.suggest(cleanWord);
+//     if (!isCorrect) {
+//       const suggestions = spell.suggest(cleanWord);
       
-      if (suggestions.length > 0) {
-        // Log pour debug : voir ce que le dictionnaire propose
-        // console.log(`Dict suggest for "${word}":`, suggestions.slice(0, 3));
+//       if (suggestions.length > 0) {
+//         // Log pour debug : voir ce que le dictionnaire propose
+//         // console.log(`Dict suggest for "${word}":`, suggestions.slice(0, 3));
         
-        // On prend la première suggestion (souvent celle avec l'accent correct)
-        return suggestions[0];
-      }
-    }
-    return word;
-  });
+//         // On prend la première suggestion (souvent celle avec l'accent correct)
+//         return suggestions[0];
+//       }
+//     }
+//     return word;
+//   });
+// }
+
+let corrector = null;
+
+// Chargement du modèle "Fast" au démarrage
+async function initIA() {
+  if (!corrector) {
+    corrector = await pipeline('text2text-generation', 'Xenova/t5-small');
+  }
 }
-  
+initIA();
+ function normalizeForComparison(text) {
+  if (!text) return "";
+
+  return text
+    .toLowerCase()
+    // 1. Gérer les apostrophes (on les supprime pour coller les mots)
+    .replace(/['’]/g, '') 
+    // 2. Supprimer les accents
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
+    // 3. Réduire les doubles lettres (pommme -> pome)
+    .replace(/(.)\1+/g, '$1') 
+    // 4. Supprimer tout ce qui n'est pas lettre ou chiffre
+    .replace(/[^a-z0-9\s]/g, '') 
+    // 5. Nettoyer les espaces en trop
+    .replace(/\s+/g, ' ')
+    .trim();
+} 
 // Assurez-vous que tokenize et detokenize sont définis au-dessus
- function computeMSAConsensus(slot) {
+function computeMSAConsensus(slot) {
   if (!slot || !slot.captions || !slot.captions.length) return "";
   
-  const versions = slot.captions.map(c => tokenize(c.text));
+  // Utilisation de normalizeForComparison pour aider le vote
+  const versions = slot.captions.map(c => tokenize(normalizeForComparison(c.text)));
   const maxLength = Math.max(...versions.map(v => v.length));
   const resultTokens = [];
 
@@ -1226,16 +1253,36 @@ function formalCorrect(tokens) {
     
     if (winner) resultTokens.push(winner);
   }
-
   return detokenize(resultTokens);
 }
-function processSlotEnd(slotIndex, poolId) {
+async function processSlotEnd(slotIndex, poolId) {
     const s = resolveSession(poolId);
     const slot = s.fragment.captionsBySlot[slotIndex];
+    if (!slot) return;
+
+    // 1. Vote majoritaire (MSA) sur le texte normalisé
     const consensusText = computeMSAConsensus(slot);
-    const cleanText = formalCorrect(tokenize(consensusText));
-    const finalText = detokenize(cleanText);
+    if (!consensusText) return;
+
+    // 2. Correction par IA (Rapide et locale)
+    let finalText = consensusText;
+    if (corrector) {
+        try {
+            const output = await corrector(`gec: ${consensusText}`, {
+                max_new_tokens: 60,
+                temperature: 0
+            });
+            finalText = output[0].generated_text;
+        } catch (err) {
+            log.error('AI', `Erreur correction: ${err.message}`);
+        }
+    }
+
+    // 3. Envoi immédiat au pool concerné
     sendToSpectators(slot, finalText);
+    
+    // N'oublie pas de mettre à jour le statut pour les admins
+    broadcastFragmentStatus(poolId);
 }
 }
 
