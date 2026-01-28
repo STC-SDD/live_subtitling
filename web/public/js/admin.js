@@ -317,7 +317,8 @@ async function handleUpload() {
   showMessage(el.uploadMessage, 'Upload en cours...', '');
   
   try {
-    await fetch(STC.API.UPLOAD, { method: 'POST', body: formData });
+    //await fetch(STC.API.UPLOAD, { method: 'POST', body: formData });
+    await fetch(STC.withPoolId(STC.API.UPLOAD), { method: 'POST', body: formData });
     showMessage(el.uploadMessage, 'Vidéo ajoutée', 'success');
     loadVideos();
     el.fileInput.value = '';

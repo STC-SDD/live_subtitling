@@ -93,37 +93,45 @@
         </div>
     </div>
 
-    <script>
-        const err = document.getElementById('err');
+  <script>
+  const err = document.getElementById('err');
+  const qs = window.location.search || '';
 
-        async function login() {
-            err.textContent = '';
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value;
+  // rendre les liens pool-aware
+  document.querySelector('a[href="/signup.html"]').href = '/signup.html' + qs;
+  document.querySelector('a[href="/subtitler-entry.html"]').href = '/subtitler-entry.html' + qs;
 
-            try {
-                const res = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
-                });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Login failed');
+  async function login() {
+    err.textContent = '';
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
 
-                localStorage.setItem('stc_token', data.token);
-                location.replace('/subtitler.html');
-            } catch (e) {
-                err.textContent = e.message;
-            }
-        }
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Login failed');
 
-        document.getElementById('btn').addEventListener('click', login);
-        document.getElementById('password').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') login();
-        });
+      localStorage.setItem('stc_token', data.token);
 
-        if (localStorage.getItem('stc_token')) location.replace('/subtitler.html');
-    </script>
+      // IMPORTANT: garder poolId
+      location.replace('/subtitler.html' + qs);
+    } catch (e) {
+      err.textContent = e.message;
+    }
+  }
+
+  document.getElementById('btn').addEventListener('click', login);
+  document.getElementById('password').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') login();
+  });
+
+  if (localStorage.getItem('stc_token')) location.replace('/subtitler.html' + qs);
+</script>
+
 </body>
 
 </html>

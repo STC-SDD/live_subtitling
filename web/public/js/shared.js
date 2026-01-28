@@ -7,6 +7,12 @@
  * - WebSocketManager (connect/reconnect + identify)
  * - HlsPlayerManager (wrapper around hls.js)
  * - Small UI helpers (formatting, escaping, messages)
+ *
+ * ✅ Multi-pool extension (non-breaking):
+ * - Reads poolId from URL (?poolId=room1)
+ * - Automatically appends poolId to all API calls (apiRequest)
+ * - Automatically includes poolId in WebSocket identify()
+ * - Provides helpers: getPoolIdFromUrl(), withPoolId(), getHlsUrl()
  */
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -180,6 +186,46 @@ function getWebSocketUrl() {
   return `${protocol}//${location.host}/ws`;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// MULTI-POOL HELPERS (non-breaking)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Get poolId from URL (?poolId=xxx). Defaults to "default".
+ * @returns {string}
+ */
+function getPoolIdFromUrl() {
+  const url = new URL(window.location.href);
+  const poolId = (url.searchParams.get('poolId') || '').trim();
+  return poolId || 'default';
+}
+
+/**
+ * Append poolId to an URL (query string), without duplicating.
+ * If poolId is "default", returns the original url.
+ * @param {string} url
+ * @returns {string}
+ */
+function withPoolId(url) {
+  const poolId = getPoolIdFromUrl();
+  if (!poolId || poolId === 'default') return url;
+
+  const u = new URL(url, window.location.origin);
+  if (!u.searchParams.get('poolId')) u.searchParams.set('poolId', poolId);
+  return u.pathname + u.search + u.hash;
+}
+
+/**
+ * Get HLS URL (live stays global; delayed becomes pool-aware)
+ * @param {'live'|'delayed'} kind
+ * @returns {string}
+ */
+function getHlsUrl(kind) {
+  if (kind === 'live') return HLS.LIVE;
+  if (kind === 'delayed') return withPoolId(HLS.DELAYED);
+  return '';
+}
+
 /**
  * Shows a temporary message in an element
  * @param {HTMLElement} container - Container element
@@ -199,12 +245,15 @@ function showMessage(container, text, type) {
 
 /**
  * Makes an API request with error handling
+ * ✅ Multi-pool: automatically appends poolId to url when poolId != default
  * @param {string} url - API endpoint
  * @param {Object} [options] - Fetch options
  * @returns {Promise<any>} Response data
  */
 async function apiRequest(url, options = {}) {
-  const response = await fetch(url, {
+  const finalUrl = withPoolId(url);
+
+  const response = await fetch(finalUrl, {
     headers: {
       'Content-Type': 'application/json',
       ...options.headers,
@@ -306,35 +355,34 @@ class WebSocketManager {
 
   /**
    * Sends identification message
-   * @param {string} clientType - Client type
-   * @param {string} [name] - Optional name
+   * ✅ Multi-pool: always includes poolId from URL (or default)
+   *
+   * Usage examples:
+   *  - ws.identify(CLIENT_TYPES.ADMIN)
+   *  - ws.identify(CLIENT_TYPES.SPECTATOR)
+   *  - ws.identify(CLIENT_TYPES.SUBTITLER, { token })
+   *  - ws.identify(CLIENT_TYPES.SUBTITLER, "Alice") // legacy name-based
+   *
+   * @param {string} clientType
+   * @param {string|Object|null} payload
    */
-  // identify(clientType, name = null) {
-  //   const message = {
-  //     type: WS_TYPES.IDENTIFY,
-  //     clientType,
-  //   };
-
-  //   if (name) {
-  //     message.name = name;
-  //   }
-
-  //   this.send(message);
-  // }
   identify(clientType, payload = null) {
     const message = {
       type: WS_TYPES.IDENTIFY,
       clientType,
+      poolId: getPoolIdFromUrl(),
     };
 
     if (typeof payload === 'string' && payload.trim()) {
       message.name = payload.trim();
     } else if (payload && typeof payload === 'object') {
       Object.assign(message, payload);
+      if (!message.poolId) message.poolId = getPoolIdFromUrl();
     }
 
     this.send(message);
   }
+
   /**
    * Closes the WebSocket connection
    */
@@ -365,6 +413,7 @@ class HlsPlayerManager {
   constructor(videoElement, options = {}) {
     this.video = videoElement;
     this.hls = null;
+
     // Configuration simple pour live streaming
     this.options = {
       liveSyncDurationCount: 3,        // Reste 3 segments derrière le live edge
@@ -376,6 +425,7 @@ class HlsPlayerManager {
       fragLoadingMaxRetry: 10,
       ...options,
     };
+
     this.onReady = null;
     this.onError = null;
   }
@@ -394,7 +444,7 @@ class HlsPlayerManager {
     this.destroy();
 
     // Add cache busting
-    const cacheBustedUrl = `${url}?t=${Date.now()}`;
+    const cacheBustedUrl = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
 
     // Check for native HLS support (Safari)
     if (!window.Hls?.isSupported()) {
@@ -517,6 +567,12 @@ window.STC = {
   formatTimestamp,
   escapeHtml,
   getWebSocketUrl,
+
+  // multi-pool helpers
+  getPoolIdFromUrl,
+  withPoolId,
+  getHlsUrl,
+
   showMessage,
   apiRequest,
   WebSocketManager,

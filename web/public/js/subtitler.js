@@ -72,13 +72,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const logoutBtn = document.getElementById('logoutBtn');
   logoutBtn?.addEventListener('click', () => {
     localStorage.removeItem('stc_token');
-    location.replace('/subtitler-entry.html');
+    //location.replace('/subtitler-entry.html');
+    location.replace('/subtitler-entry.html' + window.location.search);
   });
 
   // Auth gate
   const token = localStorage.getItem('stc_token');
   if (!token) {
-    location.replace('/subtitler-entry.html');
+    //location.replace('/subtitler-entry.html');
+    location.replace('/subtitler-entry.html' + window.location.search);
     return;
   }
 
@@ -156,19 +158,19 @@ function initWebSocket() {
   state.ws.connect();
 }
 
-// function onConnected() {
-//   updateStatus('connected');
-//   state.ws.identify(STC.CLIENT_TYPES.SUBTITLER, state.name);
-//   state.ws.send({ type: STC.WS_TYPES.FRAGMENT_JOIN, name: state.name });
-// }
+
 
 function onConnected() {
   updateStatus('connected');
 
   const token = localStorage.getItem('stc_token');
+
+  // NE PAS passer poolId ici :
+  // WebSocketManager.identify() ajoute déjà poolId depuis l’URL
   state.ws.identify(STC.CLIENT_TYPES.SUBTITLER, { token });
-  // Le serveur fait auto-join après token OK
 }
+
+
 
 function onDisconnected() {
   updateStatus('disconnected');
@@ -340,7 +342,9 @@ function createPlayer() {
     maxMaxBufferLength: 60,
   });
 
-  state.hls.load(STC.HLS.LIVE, () => {
+  //state.hls.load(STC.HLS.LIVE, () => {
+    state.hls.load(STC.getHlsUrl('live'), () => {
+
     el.videoStatus.textContent = 'En lecture';
   }, () => {
     el.videoStatus.textContent = 'Erreur vidéo';
@@ -377,7 +381,9 @@ function sendCaption() {
   state.ws.send({
     type: STC.WS_TYPES.CAPTION,
     text,
-    subtitlerName: state.name,
+    //subtitlerName: state.name,
+    subtitlerName: (state.name || 'me'),
+
   });
 
   addToHistory(text, state.name, false);

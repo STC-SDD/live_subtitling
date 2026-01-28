@@ -1,18 +1,18 @@
 /**
  * ROLE — WebSocket realtime hub (`/ws`)
  *
- * Manages realtime communications between browser clients and the server:
- * - Clients identify as: admin | subtitler | spectator
- * - Subtitlers join/leave the fragment session
- * - Subtitlers send captions; server validates and routes them
- * - Server periodically broadcasts fragment status to keep UIs in sync
+ * Multi-pool behavior:
+ * - Each client is attached to a poolId (default: "default")
+ * - Fragment status is broadcast per pool (services.broadcastFragmentStatus(poolId))
+ *
+ * This file is now fully pool-aware and stops mixing "default" and other pools.
  */
 
 import { WebSocketServer } from 'ws';
-import { state, log, isLiveRunning, getLiveTimestamp } from './core.js';
-import * as services from './services.js';
 import jwt from 'jsonwebtoken';
-import { config } from './core.js';
+
+import { state, log, isLiveRunning, getLiveTimestamp, getSession, config } from './core.js';
+import * as services from './services.js';
 
 /**
  * Initialize the WebSocket server on an existing HTTP server
@@ -23,53 +23,62 @@ export function createWebSocketServer(server) {
   const wss = new WebSocketServer({ server, path: '/ws' });
 
   wss.on('connection', (ws) => {
-    // Assign unique ID
     ws.odId = services.generateUUID();
     ws.clientType = null;
     ws.subtitlerName = null;
 
+    // Default pool until identify() arrives (legacy clients)
+    ws.poolId = 'default';
+
     services.addClient(ws);
     log.info('WS', `Client connected: ${ws.odId}`);
 
-    // Send initial state
-    services.send(ws, {
-      type: 'init',
-      odId: ws.odId,
-      running: isLiveRunning(),
-      delaySec: state.delaySec,
-      mode: state.currentMode,
-      fragmentMode: state.fragment.active,
-    });
+    // Send initial init (legacy-safe) based on default pool
+    sendInit(ws);
 
     ws.on('message', (data) => handleMessage(ws, data));
 
     ws.on('close', () => {
       services.removeClient(ws);
 
-      // Remove from subtitlers if applicable
-      if (ws.clientType === 'subtitler' && state.fragment.subtitlers.has(ws.odId)) {
-        state.fragment.subtitlers.delete(ws.odId);
-        services.broadcastFragmentStatus();
-        log.info('WS', `Subtitler left: ${ws.subtitlerName}`);
+      // Remove from subtitlers for THIS pool only
+      const session = getSession(ws.poolId);
+      if (ws.clientType === 'subtitler' && session.fragment.subtitlers.has(ws.odId)) {
+        session.fragment.subtitlers.delete(ws.odId);
+        services.broadcastFragmentStatus(ws.poolId);
+        log.info('WS', `Subtitler left: ${ws.subtitlerName || 'unknown'} (pool=${ws.poolId})`);
       }
 
-      log.info('WS', `Client disconnected: ${ws.odId}`);
+      log.info('WS', `Client disconnected: ${ws.odId} (pool=${ws.poolId})`);
     });
 
     ws.on('error', (err) => {
-      log.error('WS', `Error (${ws.odId}):`, err.message);
+      log.error('WS', `Error (${ws.odId}): ${err?.message || err}`);
     });
   });
 
-  // Fragment status broadcast (every second)
+  // Broadcast fragment status periodically for ALL pools.
+  // services.broadcastFragmentStatus() with no args => all pools
   setInterval(() => {
-    if (state.fragment.active) {
-      services.broadcastFragmentStatus();
-    }
+    services.broadcastFragmentStatus();
   }, 1000);
 
   log.info('WS', 'WebSocket server ready');
   return wss;
+}
+
+function sendInit(ws) {
+  const s = getSession(ws.poolId || 'default');
+
+  services.send(ws, {
+    type: 'init',
+    odId: ws.odId,
+    running: isLiveRunning(),
+    delaySec: state.delaySec,
+    mode: state.currentMode,
+    fragmentMode: !!s.fragment.active,
+    poolId: ws.poolId || 'default',
+  });
 }
 
 /**
@@ -81,7 +90,7 @@ function handleMessage(ws, data) {
   let msg;
   try {
     msg = JSON.parse(data.toString());
-  } catch (e) {
+  } catch {
     log.error('WS', 'Invalid JSON');
     return;
   }
@@ -110,7 +119,9 @@ function handleMessage(ws, data) {
 
 /**
  * Handle client identification
+ * msg.poolId optional => 'default'
  */
+<<<<<<< HEAD
 // function handleIdentify(ws, msg) {
 //   const { clientType, name } = msg;
 
@@ -130,20 +141,96 @@ function handleMessage(ws, data) {
 // }
 
 
+=======
+function handleIdentify(ws, msg) {
+  const { clientType, name, token } = msg;
 
-/**
- * Handle a subtitler joining the fragment session
- */
-/*function handleFragmentJoin(ws, msg) {
-  const name = msg.name || ws.subtitlerName || 'Anonymous';
+  const poolId =
+    msg.poolId && typeof msg.poolId === 'string' && msg.poolId.trim()
+      ? msg.poolId.trim()
+      : 'default';
 
-  // Skip if already joined
-  if (state.fragment.subtitlers.has(ws.odId)) {
+  if (!['admin', 'subtitler', 'spectator'].includes(clientType)) {
+    log.warn('WS', `رفض identify: clientType غير صالح (${clientType}) odId=${ws.odId}`);
     return;
   }
 
-  // Add to subtitlers map
-  state.fragment.subtitlers.set(ws.odId, {
+  // Attach client to pool ASAP
+  ws.poolId = poolId;
+  getSession(ws.poolId); // ensure session exists
+
+  // Re-send init for the real pool (important for UI consistency)
+  sendInit(ws);
+
+  if (clientType === 'subtitler') {
+    // Subtitlers MUST be authenticated
+    if (!token || typeof token !== 'string') {
+      log.warn('AUTH', `AUTH_REQUIRED subtitler odId=${ws.odId} pool=${ws.poolId}`);
+      services.send(ws, { type: 'error', error: 'AUTH_REQUIRED', poolId: ws.poolId });
+      return;
+    }
+
+    try {
+      const payload = jwt.verify(token, config.jwtSecret);
+
+      if (payload.role !== 'subtitler') {
+        log.warn(
+          'AUTH',
+          `INVALID_ROLE subtitler odId=${ws.odId} role=${payload.role} pool=${ws.poolId}`
+        );
+        services.send(ws, { type: 'error', error: 'INVALID_ROLE', poolId: ws.poolId });
+        return;
+      }
+
+      ws.clientType = 'subtitler';
+      ws.user = { id: payload.sub, email: payload.email, name: payload.name };
+      ws.subtitlerName = payload.name || name || 'Anonymous';
+
+      log.info('WS', `Identified: subtitler (${ws.subtitlerName}) (pool=${ws.poolId})`);
+
+      // Auto-join fragment membership list for this pool
+      handleFragmentJoin(ws, { name: ws.subtitlerName });
+
+      // Immediately push pool status so admin sees them
+      services.broadcastFragmentStatus(ws.poolId);
+      return;
+    } catch (e) {
+      log.warn('AUTH', `INVALID_TOKEN subtitler odId=${ws.odId} pool=${ws.poolId} err=${e?.message}`);
+      services.send(ws, { type: 'error', error: 'INVALID_TOKEN', poolId: ws.poolId });
+      return;
+    }
+  }
+
+  // Admin / spectator
+  ws.clientType = clientType;
+  if (name) ws.subtitlerName = name;
+
+  log.info('WS', `Identified: ${clientType}${name ? ` (${name})` : ''} (pool=${ws.poolId})`);
+
+  // If admin connects, push status right now (so admin page fills immediately)
+  if (clientType === 'admin') {
+    services.broadcastFragmentStatus(ws.poolId);
+  }
+}
+>>>>>>> origin/pool
+
+/**
+ * Handle a subtitler joining the fragment session (POOL-AWARE)
+ */
+<<<<<<< HEAD
+/*function handleFragmentJoin(ws, msg) {
+  const name = msg.name || ws.subtitlerName || 'Anonymous';
+=======
+function handleFragmentJoin(ws, msg) {
+  const session = getSession(ws.poolId);
+>>>>>>> origin/pool
+
+  const name = msg?.name || ws.subtitlerName || 'Anonymous';
+
+  // Skip if already joined in this pool
+  if (session.fragment.subtitlers.has(ws.odId)) return;
+
+  session.fragment.subtitlers.set(ws.odId, {
     id: ws.odId,
     name,
     ws,
@@ -152,20 +239,22 @@ function handleMessage(ws, data) {
 
   ws.subtitlerName = name;
 
-  // Confirm join
   services.send(ws, {
     type: 'fragment:joined',
     odId: ws.odId,
-    active: state.fragment.active,
+    active: !!session.fragment.active,
+    poolId: ws.poolId,
   });
 
-  log.info('FRAGMENT', `Subtitler joined: ${name}`);
-  services.broadcastFragmentStatus();
+  log.info('FRAGMENT', `Subtitler joined: ${name} (pool=${ws.poolId})`);
 
-  // Check if we can start fragment mode
-  const activeCount = services.getActiveSubtitlers().length;
-  if (state.fragment.active && activeCount >= state.fragment.requiredSubtitlers && !state.fragment.slotTimer) {
-    services.startSlotTimer();
+  // Broadcast status for THIS pool (admin-status + subtitler status)
+  services.broadcastFragmentStatus(ws.poolId);
+
+  // If fragment mode already active, scheduler will start when enough subtitlers.
+  // (services.startFragmentScheduler is pool-aware)
+  if (session.fragment.active) {
+    services.startFragmentScheduler(session);
   }
 }*/
 function handleIdentify(ws, msg) {
@@ -194,77 +283,80 @@ function handleIdentify(ws, msg) {
   if (name) ws.subtitlerName = name;
 }
 /**
- * Handle a subtitler leaving the fragment session
+ * Handle a subtitler leaving the fragment session (POOL-AWARE)
  */
 function handleFragmentLeave(ws) {
-  if (state.fragment.subtitlers.has(ws.odId)) {
-    const name = state.fragment.subtitlers.get(ws.odId).name;
-    state.fragment.subtitlers.delete(ws.odId);
-    log.info('FRAGMENT', `Subtitler left: ${name}`);
-    services.broadcastFragmentStatus();
+  const session = getSession(ws.poolId);
+
+  if (!session.fragment.subtitlers.has(ws.odId)) return;
+
+  const info = session.fragment.subtitlers.get(ws.odId);
+  session.fragment.subtitlers.delete(ws.odId);
+
+  log.info('FRAGMENT', `Subtitler left: ${info?.name || 'unknown'} (pool=${ws.poolId})`);
+
+  services.broadcastFragmentStatus(ws.poolId);
+
+  // Re-evaluate scheduler for this pool
+  if (session.fragment.active) {
+    services.startFragmentScheduler(session);
   }
 }
 
 /**
  * handleCaption - Process a caption sent by a subtitler
- *
- * IMPORTANT VALIDATION:
- * In fragment mode, a subtitler can submit only for their currently open slot
- * (their assigned slot, including its grace period). The server maps the sender
- * to the correct slot and rejects submissions outside the allowed window.
- *
- * FLOW:
- * 1. Validate text
- * 2. Build the caption object with subtitlerId (key for validation)
- * 3. Fragment mode: call addCaptionToSlot() which validates the turn
- * 4. Non-fragment mode: broadcast directly to spectators
- *
- * @param {WebSocket} ws - Subtitler connection
- * @param {Object} msg - Message containing { text, subtitlerName, autoSent }
+ * Fragment mode captions must be routed to the correct pool.
  */
 function handleCaption(ws, msg) {
   const { text, subtitlerName, autoSent } = msg;
-
   if (!text || typeof text !== 'string') return;
+
+  const poolId = ws.poolId || 'default';
+  const session = getSession(poolId);
 
   const caption = {
     id: services.generateUUID(),
     text: text.trim().slice(0, 500),
     subtitlerName: subtitlerName || ws.subtitlerName || 'Anonymous',
-    subtitlerId: ws.odId,  // Unique subtitler ID for validation
+    subtitlerId: ws.odId,
     createdAt: Date.now(),
     liveTimestamp: getLiveTimestamp(),
-    autoSent: autoSent || false,
+    autoSent: !!autoSent,
+    poolId,
   };
 
-  // Fragment mode: add to current slot (timestamp calculated by addCaptionToSlot)
-  if (state.fragment.active) {
-    const accepted = services.addCaptionToSlot(caption);
+  if (session.fragment.active) {
+    // Pool-aware addCaptionToSlot (services.js uses caption.poolId / poolOrSession internally)
+    const accepted = services.addCaptionToSlot(caption, session);
 
     if (accepted) {
-      // Broadcast to OTHER subtitlers (exclude sender to avoid duplication)
+      // broadcast to subtitlers in same pool, except sender
       services.broadcast(
         { type: 'caption', caption },
-        (client) => client.clientType === 'subtitler' && client.odId !== ws.odId
+        (client) => client.clientType === 'subtitler' && client.poolId === poolId && client.odId !== ws.odId
       );
     }
+
+    services.broadcastFragmentStatus(poolId);
   } else {
-    // Non-fragment mode: direct broadcast to spectators
+    // Non-fragment mode remains global captions history (legacy)
     state.captions.push(caption);
 
-    services.broadcast({
-      type: 'caption',
-      caption,
-      displayAt: Date.now() + state.delaySec * 1000,
-    }, (c) => c.clientType === 'spectator');
+    // spectators in this pool only
+    services.broadcast(
+      {
+        type: 'caption',
+        caption,
+        displayAt: Date.now() + state.delaySec * 1000,
+      },
+      (c) => c.clientType === 'spectator' && c.poolId === poolId
+    );
 
-    services.broadcastToAdmins({
-      type: 'caption',
-      caption,
-    });
+    // admins in this pool only
+    services.broadcastToAdminsInPool(poolId, { type: 'caption', caption });
   }
 
-  log.debug('CAPTION', `From ${caption.subtitlerName}: "${caption.text.slice(0, 30)}..."`);
+  log.debug('CAPTION', `From ${caption.subtitlerName}: "${caption.text.slice(0, 30)}..." (pool=${poolId})`);
 }
 
 export default { createWebSocketServer };

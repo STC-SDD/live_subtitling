@@ -159,7 +159,8 @@ function createPlayer() {
     maxMaxBufferLength: 60,
   });
   
-  state.hls.load(STC.HLS.DELAYED, () => {
+  //state.hls.load(STC.HLS.DELAYED, () => {
+    state.hls.load(STC.getHlsUrl('delayed'), () => {
     el.waitingScreen.classList.add('hidden');
   }, () => {
     el.waitingText.textContent = 'Chargement du flux...';
