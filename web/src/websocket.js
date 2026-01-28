@@ -121,7 +121,6 @@ function handleMessage(ws, data) {
  * Handle client identification
  * msg.poolId optional => 'default'
  */
-<<<<<<< HEAD
 // function handleIdentify(ws, msg) {
 //   const { clientType, name } = msg;
 
@@ -141,89 +140,12 @@ function handleMessage(ws, data) {
 // }
 
 
-=======
-function handleIdentify(ws, msg) {
-  const { clientType, name, token } = msg;
-
-  const poolId =
-    msg.poolId && typeof msg.poolId === 'string' && msg.poolId.trim()
-      ? msg.poolId.trim()
-      : 'default';
-
-  if (!['admin', 'subtitler', 'spectator'].includes(clientType)) {
-    log.warn('WS', `رفض identify: clientType غير صالح (${clientType}) odId=${ws.odId}`);
-    return;
-  }
-
-  // Attach client to pool ASAP
-  ws.poolId = poolId;
-  getSession(ws.poolId); // ensure session exists
-
-  // Re-send init for the real pool (important for UI consistency)
-  sendInit(ws);
-
-  if (clientType === 'subtitler') {
-    // Subtitlers MUST be authenticated
-    if (!token || typeof token !== 'string') {
-      log.warn('AUTH', `AUTH_REQUIRED subtitler odId=${ws.odId} pool=${ws.poolId}`);
-      services.send(ws, { type: 'error', error: 'AUTH_REQUIRED', poolId: ws.poolId });
-      return;
-    }
-
-    try {
-      const payload = jwt.verify(token, config.jwtSecret);
-
-      if (payload.role !== 'subtitler') {
-        log.warn(
-          'AUTH',
-          `INVALID_ROLE subtitler odId=${ws.odId} role=${payload.role} pool=${ws.poolId}`
-        );
-        services.send(ws, { type: 'error', error: 'INVALID_ROLE', poolId: ws.poolId });
-        return;
-      }
-
-      ws.clientType = 'subtitler';
-      ws.user = { id: payload.sub, email: payload.email, name: payload.name };
-      ws.subtitlerName = payload.name || name || 'Anonymous';
-
-      log.info('WS', `Identified: subtitler (${ws.subtitlerName}) (pool=${ws.poolId})`);
-
-      // Auto-join fragment membership list for this pool
-      handleFragmentJoin(ws, { name: ws.subtitlerName });
-
-      // Immediately push pool status so admin sees them
-      services.broadcastFragmentStatus(ws.poolId);
-      return;
-    } catch (e) {
-      log.warn('AUTH', `INVALID_TOKEN subtitler odId=${ws.odId} pool=${ws.poolId} err=${e?.message}`);
-      services.send(ws, { type: 'error', error: 'INVALID_TOKEN', poolId: ws.poolId });
-      return;
-    }
-  }
-
-  // Admin / spectator
-  ws.clientType = clientType;
-  if (name) ws.subtitlerName = name;
-
-  log.info('WS', `Identified: ${clientType}${name ? ` (${name})` : ''} (pool=${ws.poolId})`);
-
-  // If admin connects, push status right now (so admin page fills immediately)
-  if (clientType === 'admin') {
-    services.broadcastFragmentStatus(ws.poolId);
-  }
-}
->>>>>>> origin/pool
 
 /**
  * Handle a subtitler joining the fragment session (POOL-AWARE)
  */
-<<<<<<< HEAD
 /*function handleFragmentJoin(ws, msg) {
   const name = msg.name || ws.subtitlerName || 'Anonymous';
-=======
-function handleFragmentJoin(ws, msg) {
-  const session = getSession(ws.poolId);
->>>>>>> origin/pool
 
   const name = msg?.name || ws.subtitlerName || 'Anonymous';
 
