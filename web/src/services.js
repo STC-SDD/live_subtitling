@@ -1229,6 +1229,14 @@ function formalCorrect(tokens) {
 
   return detokenize(resultTokens);
 }
+function processSlotEnd(slotIndex, poolId) {
+    const s = resolveSession(poolId);
+    const slot = s.fragment.captionsBySlot[slotIndex];
+    const consensusText = computeMSAConsensus(slot);
+    const cleanText = formalCorrect(tokenize(consensusText));
+    const finalText = detokenize(cleanText);
+    sendToSpectators(slot, finalText);
+}
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
