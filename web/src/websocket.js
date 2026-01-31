@@ -361,7 +361,18 @@ function handleMessage(ws, data) {
     case 'identify':
       handleIdentify(ws, msg);
       break;
-
+    case 'admin:set-pools':
+      if (ws.clientType === 'admin') { // Sécurité : seul l'admin peut changer ça
+        const count = parseInt(msg.nbPools, 10);
+        if (count > 0 && count <= 10) {
+          state.fragment.nbPools = count;
+          log.info('ADMIN', `Nombre de pools mis à jour à : ${count}`);
+          
+          // On renvoie le statut mis à jour à tout le monde
+          services.broadcastFragmentStatus();
+        }
+      }
+      break;
     case 'fragment:join':
       handleFragmentJoin(ws, msg);
       break;

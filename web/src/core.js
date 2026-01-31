@@ -308,8 +308,32 @@ export const state = {
   // Current active session
   currentSessionId: null,
 
+  // fragment: {
+  //   active: false,
+  //   nbPools: 1,
+  //   pools: [],
+  //   slotDuration: config.defaultSlotDuration,
+  //   overlapDuration: config.defaultOverlapDuration,
+  //   notifyBefore: config.defaultNotifyBefore,
+  //   gracePeriodPercent: 20,
+  //   requiredSubtitlers: 2,
+  //   subtitlers: new Map(),
+  //   currentSlotIndex: 0,
+  //   slotStartTime: null,
+  //   slotTimer: null,
+  //   notifyTimer: null,
+  //   graceTimer: null,
+  //   schedulerTimer: null,
+  //   slotTimers: new Set(),
+  //   openSlotBySubtitlerId: new Map(),
+  //   captionsBySlot: [],
+  //   fusedCaptions: [],
+  //   pendingContributions: new Map(), // Map<slotIndex, Array<{userId, text}>>
+  // },
   fragment: {
     active: false,
+    nbPools: 2,
+    pools: [], // Corrigé : minuscule pour correspondre au reste du code
     slotDuration: config.defaultSlotDuration,
     overlapDuration: config.defaultOverlapDuration,
     notifyBefore: config.defaultNotifyBefore,
@@ -318,14 +342,12 @@ export const state = {
     subtitlers: new Map(),
     currentSlotIndex: 0,
     slotStartTime: null,
-    slotTimer: null,
-    notifyTimer: null,
-    graceTimer: null,
-    schedulerTimer: null,
-    slotTimers: new Set(),
+        slotTimers: new Set(), 
+    
     openSlotBySubtitlerId: new Map(),
-    captionsBySlot: [],
-    fusedCaptions: [],
+    captionsBySlot: [], // Contiendra { slotIndex, captions: [], startTime, ... }
+    fusedCaptions: [],  // Résultats après MSA + IA
+    pendingContributions: new Map(), 
   },
 };
 

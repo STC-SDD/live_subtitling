@@ -1,259 +1,48 @@
 <!doctype html>
-<!--
-  ROLE — Session management page for admin
--->
 <html lang="fr">
-
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Gestion des Sessions</title>
     <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #111;
-            color: #fff;
-            min-height: 100vh;
-            padding: 24px;
+            background: #111; color: #fff; min-height: 100vh; padding: 24px;
         }
-
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
-
-        h1 {
-            font-size: 1.3em;
-            margin-bottom: 24px;
-            font-weight: 500;
-            color: #888;
-        }
-
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            font-size: 0.9em;
-            font-weight: 500;
-            cursor: pointer;
-        }
-
-        .btn-primary {
-            background: #2ecc71;
-            color: #000;
-        }
-
-        .btn-danger {
-            background: #e74c3c;
-            color: #fff;
-        }
-
-        .btn:disabled {
-            opacity: 0.3;
-            cursor: not-allowed;
-        }
-
-        .btn:hover:not(:disabled) {
-            filter: brightness(0.9);
-        }
-
-        .card {
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            border-radius: 8px;
-            padding: 20px;
-            margin-bottom: 16px;
-        }
-
-        .sessions-list {
-            display: grid;
-            gap: 12px;
-        }
-
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { font-size: 1.3em; margin-bottom: 24px; font-weight: 500; color: #888; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 4px; font-size: 0.9em; font-weight: 500; cursor: pointer; transition: 0.2s; }
+        .btn-primary { background: #2ecc71; color: #000; }
+        .btn-danger { background: #e74c3c; color: #fff; }
+        .btn:hover { filter: brightness(0.9); }
+        .card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
         .session-item {
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            border-radius: 8px;
-            padding: 16px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px;
+            padding: 16px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
         }
-
-        .session-item.active {
-            border-color: #2ecc71;
-            background: rgba(46, 204, 113, 0.05);
-        }
-
-        .session-info h3 {
-            font-size: 1em;
-            font-weight: 500;
-            margin-bottom: 4px;
-        }
-
-        .session-meta {
-            font-size: 0.8em;
-            color: #666;
-        }
-
-        .session-id {
-            display: inline-block;
-            background: #2a2a2a;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-family: monospace;
-            margin-right: 8px;
-        }
-
-        .session-status {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 0.75em;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .session-status.pending {
-            background: #f39c12;
-            color: #000;
-        }
-
-        .session-status.active {
-            background: #2ecc71;
-            color: #000;
-        }
-
-        .session-status.ended {
-            background: #555;
-            color: #fff;
-        }
-
-        .session-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .session-actions button {
-            padding: 6px 12px;
-            font-size: 0.85em;
-        }
-
+        .session-item.active { border-color: #2ecc71; background: rgba(46, 204, 113, 0.05); }
+        .session-info h3 { font-size: 1em; font-weight: 500; margin-bottom: 4px; }
+        .session-id { background: #2a2a2a; padding: 2px 8px; border-radius: 3px; font-family: monospace; margin-right: 8px; }
+        .session-status { padding: 2px 8px; border-radius: 3px; font-size: 0.75em; font-weight: 600; text-transform: uppercase; }
+        .session-status.pending { background: #f39c12; color: #000; }
+        .session-status.active { background: #2ecc71; color: #000; }
+        .session-actions { display: flex; gap: 8px; }
+        
+        /* Modal simple */
         .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.85); z-index: 1000; align-items: center; justify-content: center;
         }
-
-        .modal.show {
-            display: flex;
+        .modal.show { display: flex; }
+        .modal-content { background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 30px; width: 450px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; color: #aaa; font-size: 0.9em; }
+        .form-group input, .form-group select {
+            width: 100%; padding: 12px; background: #222; border: 1px solid #444; border-radius: 6px; color: #fff;
         }
-
-        .modal-content {
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            border-radius: 8px;
-            padding: 24px;
-            max-width: 500px;
-            width: 90%;
-        }
-
-        .modal-title {
-            font-size: 1.2em;
-            margin-bottom: 20px;
-        }
-
-        .form-group {
-            margin-bottom: 16px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 6px;
-            color: #888;
-            font-size: 0.85em;
-        }
-
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 10px 12px;
-            background: #222;
-            border: 1px solid #333;
-            border-radius: 4px;
-            color: #fff;
-            font-size: 0.9em;
-        }
-
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #444;
-        }
-
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-
-        .message {
-            padding: 10px 12px;
-            border-radius: 4px;
-            margin-top: 12px;
-            font-size: 0.85em;
-        }
-
-        .message.success {
-            background: rgba(46, 204, 113, 0.1);
-            color: #2ecc71;
-        }
-
-        .message.error {
-            background: rgba(231, 76, 60, 0.1);
-            color: #e74c3c;
-        }
-
-        .modal-actions {
-            display: flex;
-            gap: 8px;
-            justify-content: flex-end;
-            margin-top: 20px;
-        }
-
-        .links {
-            margin-top: 20px;
-        }
-
-        .links a {
-            color: #2ecc71;
-            text-decoration: none;
-            font-size: 0.9em;
-        }
-
-        .links a:hover {
-            text-decoration: underline;
-        }
+        .links a { color: #2ecc71; text-decoration: none; font-size: 0.9em; }
     </style>
 </head>
 
@@ -261,85 +50,46 @@
     <div class="container">
         <div class="header">
             <h1>Gestion des Sessions</h1>
-            <button class="btn btn-primary" id="createBtn">Nouvelle Session</button>
+            <button class="btn btn-primary" id="createBtn">Créer une Session</button>
         </div>
 
         <div class="card">
-            <h3 style="font-size: 0.9em; color: #666; margin-bottom: 16px;">Sessions actives et programmées</h3>
-            <div class="sessions-list" id="sessionsList">
-                <p style="color:#444;text-align:center;padding:20px;">Chargement...</p>
+            <div id="sessionsList">
+                <p style="color:#444;text-align:center;">Chargement des sessions...</p>
             </div>
         </div>
 
         <div class="links">
-            <a href="/">← Retour</a>
+            <a href="/admin.html">← Accéder au panneau Admin</a>
         </div>
     </div>
 
-    <!-- Create/Edit Session Modal -->
     <div class="modal" id="sessionModal">
         <div class="modal-content">
-            <h2 class="modal-title">Nouvelle Session</h2>
+            <h2 style="margin-bottom: 20px;">Nouvelle Session</h2>
 
             <div class="form-group">
-                <label>ID de la session *</label>
-                <input type="text" id="sessionId" placeholder="Ex: SESSION-001" maxlength="20"
-                    style="text-transform: uppercase;" />
-                <small style="color:#666;font-size:0.75em;">Code que les sous-titreurs utiliseront pour
-                    rejoindre</small>
+                <label>ID / Code de la session (ex: LIVE-MOROCCO)</label>
+                <input type="text" id="sessionId" placeholder="Saisir le code..." style="text-transform: uppercase;" />
             </div>
 
             <div class="form-group">
-                <label>Titre *</label>
-                <input type="text" id="sessionTitle" placeholder="Ex: Conférence du 24 janvier 2026" />
+                <label>Nom de l'événement</label>
+                <input type="text" id="sessionTitle" placeholder="Ex: Live Speed Maroc" />
             </div>
 
             <div class="form-group">
-                <label>Vidéo source *</label>
+                <label>Choisir la vidéo</label>
                 <select id="sessionVideo">
-                    <option value="">Sélectionner une vidéo</option>
+                    <option value="">Chargement des vidéos...</option>
                 </select>
-            </div>
-
-            <h3 style="font-size: 0.9em; color: #666; margin: 20px 0 12px;">Configuration</h3>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Sous-titreurs requis</label>
-                    <input type="number" id="cfgSubtitlers" value="2" min="1" max="10" />
-                </div>
-                <div class="form-group">
-                    <label>Délai spectateurs (s)</label>
-                    <input type="number" id="cfgDelay" value="20" min="5" max="120" />
-                </div>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Durée slot (s)</label>
-                    <input type="number" id="cfgSlotDuration" value="30" min="10" max="120" />
-                </div>
-                <div class="form-group">
-                    <label>Chevauchement (s)</label>
-                    <input type="number" id="cfgOverlap" value="5" min="0" max="30" />
-                </div>
-            </div>
-
-            <div class="form-row">
-                <div class="form-group">
-                    <label>Temps bonus (%)</label>
-                    <input type="number" id="cfgGrace" value="20" min="0" max="100" />
-                </div>
-                <div class="form-group">
-                    <!-- Empty for alignment -->
-                </div>
             </div>
 
             <div id="modalMessage"></div>
 
-            <div class="modal-actions">
-                <button class="btn" id="modalCancel" style="background:#333;color:#fff;">Annuler</button>
-                <button class="btn btn-primary" id="modalSave">Créer</button>
+            <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button class="btn" id="modalCancel" style="background:#333; color:#ccc;">Annuler</button>
+                <button class="btn btn-primary" id="modalSave">Enregistrer la Session</button>
             </div>
         </div>
     </div>
@@ -356,14 +106,18 @@
             sessionId: document.getElementById('sessionId'),
             sessionTitle: document.getElementById('sessionTitle'),
             sessionVideo: document.getElementById('sessionVideo'),
-            cfgSubtitlers: document.getElementById('cfgSubtitlers'),
-            cfgDelay: document.getElementById('cfgDelay'),
-            cfgSlotDuration: document.getElementById('cfgSlotDuration'),
-            cfgOverlap: document.getElementById('cfgOverlap'),
-            cfgGrace: document.getElementById('cfgGrace'),
         };
 
-        // Load videos
+        const ADMIN_TOKEN = localStorage.getItem('stc_admin_token');
+        if (!ADMIN_TOKEN) location.replace('/admin-login.html');
+
+        function adminApi(url, options = {}) {
+            return STC.apiRequest(url, {
+                ...options,
+                headers: { ...(options.headers || {}), Authorization: `Bearer ${ADMIN_TOKEN}` },
+            });
+        }
+
         async function loadVideos() {
             try {
                 const videos = await STC.apiRequest(STC.API.VIDEOS);
@@ -374,175 +128,73 @@
                     opt.textContent = v.name;
                     el.sessionVideo.appendChild(opt);
                 });
-            } catch (e) {
-                console.error('Failed to load videos:', e);
-            }
+            } catch (e) { console.error(e); }
         }
 
-
-
-        // --- Admin auth guard + helper ---
-        const ADMIN_TOKEN = localStorage.getItem('stc_admin_token');
-        if (!ADMIN_TOKEN) {
-            location.replace('/admin-login.html');
-        }
-
-        function adminApi(url, options = {}) {
-            return STC.apiRequest(url, {
-                ...options,
-                headers: {
-                    ...(options.headers || {}),
-                    Authorization: `Bearer ${ADMIN_TOKEN}`,
-                },
-            });
-        }
-
-        // Load sessions
         async function loadSessions() {
             try {
-                // const data = await STC.apiRequest('/api/sessions');
                 const data = await adminApi('/api/sessions');
                 const sessions = data.sessions || [];
-
                 if (sessions.length === 0) {
-                    el.sessionsList.innerHTML = '<p style="color:#444;text-align:center;padding:20px;">Aucune session</p>';
+                    el.sessionsList.innerHTML = '<p style="color:#444;text-align:center;">Aucune session créée.</p>';
                     return;
                 }
 
-                el.sessionsList.innerHTML = sessions.map(s => {
-                    const date = new Date(s.createdAt).toLocaleDateString('fr-FR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    });
-
-                    return `
-            <div class="session-item ${s.status === 'active' ? 'active' : ''}">
-              <div class="session-info">
-                <h3>
-                  <span class="session-id">${STC.escapeHtml(s.id)}</span>
-                  <span class="session-status ${s.status}">${s.status}</span>
-                </h3>
-                <div>${STC.escapeHtml(s.title)}</div>
-                <div class="session-meta">
-                  Créée le ${date} • ${s.config?.requiredSubtitlers || 2} sous-titreurs
-                </div>
-              </div>
-              <div class="session-actions">
-                ${s.status === 'pending' ? `
-                  <button class="btn btn-primary" onclick="startSession('${s.id}')">Démarrer</button>
-                  <button class="btn btn-danger" onclick="deleteSession('${s.id}')">Supprimer</button>
-                ` : ''}
-                ${s.status === 'active' ? `
-                  <button class="btn" onclick="location.href='/admin.html'" style="background:#2ecc71;color:#000;">Gérer</button>
-                ` : ''}
-              </div>
-            </div>
-          `;
-                }).join('');
-            } catch (e) {
-                console.error('Failed to load sessions:', e);
-                el.sessionsList.innerHTML = '<p style="color:#e74c3c;text-align:center;padding:20px;">Erreur de chargement</p>';
-            }
+                el.sessionsList.innerHTML = sessions.map(s => `
+                    <div class="session-item ${s.status === 'active' ? 'active' : ''}">
+                        <div class="session-info">
+                            <h3><span class="session-id">${s.id}</span> <span class="session-status ${s.status}">${s.status}</span></h3>
+                            <div style="color: #eee;">${s.title}</div>
+                        </div>
+                        <div class="session-actions">
+                            ${s.status === 'pending' ? `
+                                <button class="btn btn-primary" onclick="startSession('${s.id}')">Configurer & Lancer</button>
+                                <button class="btn btn-danger" onclick="deleteSession('${s.id}')">Supprimer</button>
+                            ` : `
+                                <button class="btn" onclick="location.href='/admin.html?session=${s.id}'" style="background:#2ecc71;">Gérer le Direct</button>
+                            `}
+                        </div>
+                    </div>
+                `).join('');
+            } catch (e) { console.error(e); }
         }
 
-        // Create session
         async function createSession() {
-            el.modalMessage.innerHTML = '';
-
             const id = el.sessionId.value.trim().toUpperCase();
             const title = el.sessionTitle.value.trim();
             const videoPath = el.sessionVideo.value;
 
-            if (!id) {
-                el.modalMessage.innerHTML = '<div class="message error">ID de session requis</div>';
-                return;
-            }
-
-            if (!title) {
-                el.modalMessage.innerHTML = '<div class="message error">Titre requis</div>';
-                return;
-            }
-
-            if (!videoPath) {
-                el.modalMessage.innerHTML = '<div class="message error">Vidéo requise</div>';
+            if (!id || !title || !videoPath) {
+                el.modalMessage.innerHTML = '<p style="color:#e74c3c; font-size:0.8em;">Remplissez tous les champs.</p>';
                 return;
             }
 
             try {
                 await adminApi('/api/sessions', {
                     method: 'POST',
-                    body: JSON.stringify({
-                        id,
-                        title,
-                        videoPath,
-                        config: {
-                            requiredSubtitlers: parseInt(el.cfgSubtitlers.value) || 2,
-                            delaySec: parseInt(el.cfgDelay.value) || 20,
-                            slotDuration: parseInt(el.cfgSlotDuration.value) || 30,
-                            overlapDuration: parseInt(el.cfgOverlap.value) || 5,
-                            gracePeriodPercent: parseInt(el.cfgGrace.value) || 20,
-                            notifyBefore: 5,
-                        }
-                    }),
+                    body: JSON.stringify({ id, title, videoPath, config: {} }) // Config vide, gérée par l'admin plus tard
                 });
-
                 el.modal.classList.remove('show');
-                resetForm();
                 loadSessions();
-            } catch (e) {
-                el.modalMessage.innerHTML = `<div class="message error">${e.message}</div>`;
-            }
+            } catch (e) { el.modalMessage.innerHTML = `<p style="color:#e74c3c;">${e.message}</p>`; }
         }
 
-        // Delete session
-        window.deleteSession = async function (id) {
-            if (!confirm(`Supprimer la session ${id} ?`)) return;
+        window.startSession = (id) => location.href = `/admin.html?session=${id}`;
 
-            try {
+        window.deleteSession = async (id) => {
+            if (confirm(`Supprimer la session ${id} ?`)) {
                 await adminApi(`/api/sessions/${id}`, { method: 'DELETE' });
                 loadSessions();
-            } catch (e) {
-                alert('Erreur: ' + e.message);
             }
         };
 
-        // Start session
-        window.startSession = function (id) {
-            location.href = `/admin.html?session=${id}`;
-        };
-
-        // Modal
-        function resetForm() {
-            el.sessionId.value = '';
-            el.sessionTitle.value = '';
-            el.sessionVideo.value = '';
-            el.cfgSubtitlers.value = '2';
-            el.cfgDelay.value = '20';
-            el.cfgSlotDuration.value = '30';
-            el.cfgOverlap.value = '5';
-            el.cfgGrace.value = '20';
-            el.modalMessage.innerHTML = '';
-        }
-
-        el.createBtn.addEventListener('click', () => {
-            resetForm();
-            el.modal.classList.add('show');
-        });
-
-        el.modalCancel.addEventListener('click', () => {
-            el.modal.classList.remove('show');
-        });
-
+        el.createBtn.addEventListener('click', () => { el.modal.classList.add('show'); el.modalMessage.innerHTML=''; });
+        el.modalCancel.addEventListener('click', () => el.modal.classList.remove('show'));
         el.modalSave.addEventListener('click', createSession);
 
-        // Init
         loadVideos();
         loadSessions();
         setInterval(loadSessions, 5000);
     </script>
 </body>
-
 </html>

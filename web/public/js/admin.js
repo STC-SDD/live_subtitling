@@ -358,6 +358,7 @@ const state = {
 const el = {};
 
 document.addEventListener('DOMContentLoaded', () => {
+  el.nbPoolsInput = document.getElementById('nbPoolsInput'); // AJOUT
   // Cache elements
   el.liveStatus = document.getElementById('liveStatus');
   el.segmentCount = document.getElementById('segmentCount');
@@ -640,6 +641,15 @@ async function loadVideos() {
 
 // Events
 function setupEvents() {
+  el.nbPoolsInput?.addEventListener('change', () => {
+    const count = parseInt(el.nbPoolsInput.value) || 1;
+    if (state.ws && state.ws.isOpen()) { // Vérifiez la méthode d'ouverture de votre STC.WebSocketManager
+      state.ws.send({
+        type: 'admin:set-pools',
+        nbPools: count
+      });
+    }
+  });
   el.startBtn.addEventListener('click', startLive);
   el.stopBtn.addEventListener('click', stopLive);
 
@@ -671,22 +681,37 @@ function setupEvents() {
 async function startLive() {
   const video = el.videoSelect.value;
   const requiredSubtitlers = parseInt(el.requiredSubtitlers.value) || 2;
+  const nbPools = parseInt(el.nbPoolsInput.value) || 1; // Récupération du nombre de pools
 
-  // If we have a session, use it
+  // --- Préparation de l'objet de configuration commun ---
+  const liveConfig = {
+    source: video,
+    delaySec: parseInt(el.delayInput.value) || 20,
+    slotDuration: parseInt(el.slotDuration.value) || 30,
+    overlapDuration: parseInt(el.overlapDuration.value) || 5,
+    gracePeriodPercent: parseInt(el.gracePeriod.value) || 20,
+    requiredSubtitlers: requiredSubtitlers,
+    nbPools: nbPools, // Ajout du paramètre pour le Back
+    notifyBefore: 5,
+  };
+
+  // Validation commune : nombre de sous-titreurs minimum
+  if (state.subtitlers.length < requiredSubtitlers) {
+    showMessage(el.controlMessage, `Il faut ${requiredSubtitlers} sous-titreurs (${state.subtitlers.length} connectés)`, 'error');
+    return;
+  }
+
+  // --- CAS A : AVEC SESSION ---
   if (state.currentSessionId) {
-    if (state.subtitlers.length < requiredSubtitlers) {
-      showMessage(el.controlMessage, `Il faut ${requiredSubtitlers} sous-titreurs (${state.subtitlers.length} connectés)`, 'error');
-      return;
-    }
-
     el.startBtn.disabled = true;
     showMessage(el.controlMessage, 'Démarrage de la session...', '');
 
     try {
-      // await STC.apiRequest(STC.API.LIVE_START, {
+      // On envoie TOUTE la config + le sessionId en un seul appel
       await adminApi(STC.API.LIVE_START, {
         method: 'POST',
         body: JSON.stringify({
+          ...liveConfig, // On inclut les réglages UI (pools, slots, etc.)
           sessionId: state.currentSessionId,
         }),
       });
@@ -699,14 +724,9 @@ async function startLive() {
     return;
   }
 
-  // Standard start (no session)
+  // --- CAS B : START STANDARD (SANS SESSION) ---
   if (!video) {
     showMessage(el.controlMessage, 'Sélectionnez une vidéo', 'error');
-    return;
-  }
-
-  if (state.subtitlers.length < requiredSubtitlers) {
-    showMessage(el.controlMessage, `Il faut ${requiredSubtitlers} sous-titreurs (${state.subtitlers.length} connectés)`, 'error');
     return;
   }
 
@@ -716,15 +736,7 @@ async function startLive() {
   try {
     await STC.apiRequest(STC.API.LIVE_START, {
       method: 'POST',
-      body: JSON.stringify({
-        source: video,
-        delaySec: parseInt(el.delayInput.value) || 20,
-        slotDuration: parseInt(el.slotDuration.value) || 30,
-        overlapDuration: parseInt(el.overlapDuration.value) || 5,
-        gracePeriodPercent: parseInt(el.gracePeriod.value) || 20,
-        requiredSubtitlers: requiredSubtitlers,
-        notifyBefore: 5,
-      }),
+      body: JSON.stringify(liveConfig), // Utilisation de l'objet commun avec nbPools
     });
 
     showMessage(el.controlMessage, 'Live démarré', 'success');
