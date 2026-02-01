@@ -1,279 +1,167 @@
 <!doctype html>
-<!--
-  ROLE — Spectator entry page (session required)
--->
 <html lang="fr">
-
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Spectateur — Accès</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #111;
-            color: #fff;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
-        }
-
-        .container {
-            max-width: 420px;
-            width: 100%;
-        }
-
-        .header {
-            text-align: center;
-            margin-bottom: 32px;
-        }
-
-        .header h1 {
-            font-size: 1.3em;
-            font-weight: 500;
-            color: #fff;
-            margin-bottom: 8px;
-        }
-
-        .header p {
-            color: #666;
-            font-size: 0.85em;
-        }
-
-        .card {
-            background: #1a1a1a;
-            border: 1px solid #2a2a2a;
-            border-radius: 10px;
-            padding: 24px;
-            margin-bottom: 16px;
-        }
-
-        .card-title {
-            font-size: 0.9em;
-            font-weight: 500;
-            margin-bottom: 12px;
-            color: #aaa;
-        }
-
-        .card-description {
-            font-size: 0.8em;
-            color: #666;
-            margin-bottom: 16px;
-            line-height: 1.4;
-        }
-
-        .input-group {
-            margin-bottom: 12px;
-        }
-
-        .input-group label {
-            display: block;
-            margin-bottom: 6px;
-            color: #888;
-            font-size: 0.8em;
-        }
-
-        .input-group input {
-            width: 100%;
-            padding: 12px 14px;
-            background: #151515;
-            border: 1px solid #2a2a2a;
-            border-radius: 6px;
-            color: #fff;
-            font-size: 0.95em;
-            transition: border-color 0.15s;
-        }
-
-        .input-group input:focus {
-            outline: none;
-            border-color: #3a3a3a;
-        }
-
-        .btn {
-            width: 100%;
-            padding: 12px 18px;
-            border: none;
-            border-radius: 6px;
-            font-size: 0.9em;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-
-        .btn-primary {
-            background: #9b59b6;
-            color: #fff;
-        }
-
-        .btn-primary:hover {
-            filter: brightness(0.9);
-        }
-
-        .session-info {
-            background: rgba(155, 89, 182, 0.05);
-            border: 1px solid rgba(155, 89, 182, 0.2);
-            border-radius: 6px;
-            padding: 12px;
-            margin-bottom: 16px;
-            font-size: 0.85em;
-        }
-
-        .session-info strong {
-            color: #9b59b6;
-        }
-
-        .error {
-            color: #e74c3c;
-            font-size: 0.8em;
-            margin-top: 8px;
-            min-height: 20px;
-        }
-
-        .footer {
-            text-align: center;
-            margin-top: 24px;
-        }
-
-        .footer a {
-            color: #666;
-            text-decoration: none;
-            font-size: 0.85em;
-            transition: color 0.15s;
-        }
-
-        .footer a:hover {
-            color: #888;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sessions en Direct</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #111; color: #fff; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .container { width: 100%; max-width: 760px; }
+    h1 { font-size: 1.8em; font-weight: 700; display:flex; gap:10px; align-items:center; justify-content:center; margin-bottom: 6px; }
+    .subtitle { text-align:center; color:#777; margin-bottom: 18px; }
+    .alert {
+      display:none;
+      margin: 12px auto 16px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      border: 1px solid rgba(231,76,60,0.35);
+      background: rgba(231,76,60,0.08);
+      color: #ff6b6b;
+      max-width: 720px;
+    }
+    .card {
+      background: #161616;
+      border: 1px solid #2a2a2a;
+      border-radius: 14px;
+      padding: 18px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }
+    .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom: 10px; }
+    .card-title { font-size: 1em; color:#bbb; font-weight:600; }
+    .muted { color:#666; font-size:0.9em; }
+    .sessions { margin-top: 12px; display:flex; flex-direction:column; gap:10px; }
+    .session {
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid #2a2a2a;
+      background:#111;
+    }
+    .session .left { display:flex; flex-direction:column; gap:4px; }
+    .pill {
+      display:inline-flex; align-items:center; gap:8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      background:#222; color:#ddd;
+      padding: 2px 10px; border-radius: 999px;
+      width: fit-content;
+      border: 1px solid #333;
+    }
+    .session .title { color:#eee; font-weight:600; }
+    .btn {
+      border: none; border-radius: 10px;
+      padding: 10px 14px;
+      cursor:pointer;
+      font-weight:700;
+      transition: 0.15s;
+    }
+    .btn:hover { filter: brightness(0.95); }
+    .btn-primary { background: #2ecc71; color:#000; }
+    .btn-secondary { background:#262626; color:#ddd; border: 1px solid #333; }
+    .empty {
+      padding: 26px 10px;
+      text-align:center;
+      color:#666;
+    }
+    .footer { text-align:center; margin-top: 14px; }
+    a { color:#777; text-decoration:none; }
+    a:hover { color:#aaa; }
+  </style>
 </head>
-
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Spectateur</h1>
-            <p>Code de session requis</p>
-        </div>
+  <div class="container">
+    <h1>📺 Sessions en Direct</h1>
+    <div class="subtitle">Cliquez sur une session pour regarder le live</div>
 
-        <div class="card">
-            <div class="card-title">Rejoindre une session</div>
-            <div class="card-description">
-                Entrez le code de session fourni pour regarder le live.
-            </div>
+    <div class="alert" id="alert"></div>
 
-            <div class="input-group">
-                <label for="sessionCode">Code de session</label>
-                <input type="text" id="sessionCode" placeholder="Ex: SESSION-001" style="text-transform: uppercase;"
-                    autocomplete="off" />
-            </div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Sessions disponibles</div>
+        <button class="btn btn-secondary" id="refreshBtn">Actualiser</button>
+      </div>
 
-            <div id="sessionInfo"></div>
+      <div class="sessions" id="sessions"></div>
 
-            <button class="btn btn-primary" id="joinSessionBtn">
-                Regarder la session
-            </button>
-
-            <div class="error" id="sessionError"></div>
-        </div>
-
-        <div class="footer">
-            <a href="/">← Retour à l'accueil</a>
-        </div>
+      <div class="footer" style="margin-top:16px;">
+        <a href="/">← Retour à l'accueil</a>
+      </div>
     </div>
+  </div>
 
-    <script src="/js/shared.js"></script>
-    <script>
-        const el = {
-            sessionCode: document.getElementById('sessionCode'),
-            joinSessionBtn: document.getElementById('joinSessionBtn'),
-            sessionError: document.getElementById('sessionError'),
-            sessionInfo: document.getElementById('sessionInfo'),
-        };
+  <script src="/js/shared.js"></script>
+  <script>
+    const el = {
+      sessions: document.getElementById('sessions'),
+      alert: document.getElementById('alert'),
+      refreshBtn: document.getElementById('refreshBtn'),
+    };
 
-        let currentSession = null;
+    function normalizeSessionId(id) {
+      return String(id || '').trim().toUpperCase();
+    }
 
-        // Check session code validity
-        async function checkSession() {
-            const code = el.sessionCode.value.trim().toUpperCase();
-            if (!code) return;
+    function showError(message) {
+      el.alert.style.display = 'block';
+      el.alert.textContent = message;
+    }
 
-            try {
-                const data = await STC.apiRequest(`/api/sessions/${code}`);
-                currentSession = data.session;
+    function clearError() {
+      el.alert.style.display = 'none';
+      el.alert.textContent = '';
+    }
 
-                if (currentSession.status === 'ended') {
-                    el.sessionInfo.innerHTML = '';
-                    el.sessionError.textContent = 'Cette session est terminée';
-                    return;
-                }
+    function goToSession(sessionId) {
+      const sid = normalizeSessionId(sessionId);
+      if (!sid) return;
+      localStorage.setItem('spectator_session_id', sid);
+      location.href = '/spectator.html';
+    }
 
-                el.sessionInfo.innerHTML = `
-          <div class="session-info">
-            <strong>${STC.escapeHtml(currentSession.title)}</strong><br>
-            <span style="color:#888;">Statut: ${currentSession.status === 'active' ? 'En cours' : 'Programmée'}</span>
+    async function loadSessions() {
+      clearError();
+      el.sessions.innerHTML = '<div class="empty">Chargement...</div>';
+
+      try {
+        const data = await STC.apiRequest('/api/sessions/public');
+        const sessions = data.sessions || [];
+
+        if (sessions.length === 0) {
+          el.sessions.innerHTML = '<div class="empty">Aucune session en direct pour le moment.</div>';
+          return;
+        }
+
+        el.sessions.innerHTML = sessions.map(s => `
+          <div class="session">
+            <div class="left">
+              <div class="pill">${STC.escapeHtml(s.id)}</div>
+              <div class="title">${STC.escapeHtml(s.title || 'Session')}</div>
+            </div>
+            <button class="btn btn-primary" onclick="window.__join('${s.id}')">Regarder</button>
           </div>
-        `;
-                el.sessionError.textContent = '';
-            } catch (e) {
-                el.sessionInfo.innerHTML = '';
-                if (e.message.includes('404') || e.message.includes('not found')) {
-                    el.sessionError.textContent = 'Code de session invalide';
-                } else {
-                    el.sessionError.textContent = 'Erreur de connexion';
-                }
-                currentSession = null;
-            }
-        }
+        `).join('');
+      } catch (e) {
+        console.error(e);
+        showError('Impossible de charger les sessions. Vérifiez votre connexion.');
+        const msg = (e && e.message) ? String(e.message) : '';
+        el.sessions.innerHTML =
+          '<div class="empty">Impossible de charger les sessions<br><span class="muted">' +
+          STC.escapeHtml(msg) +
+          '</span></div>';
+      }
+    }
 
-        // Join session
-        async function handleJoinSession() {
-            el.sessionError.textContent = '';
+    window.__join = (id) => goToSession(id);
 
-            const code = el.sessionCode.value.trim().toUpperCase();
+    el.refreshBtn.addEventListener('click', loadSessions);
 
-            if (!code) {
-                el.sessionError.textContent = 'Veuillez entrer un code de session';
-                return;
-            }
-
-            if (!currentSession) {
-                await checkSession();
-                if (!currentSession) return;
-            }
-
-            localStorage.setItem('spectator_session_id', code);
-            location.replace('/spectator.html');
-        }
-
-        // Event listeners
-        el.joinSessionBtn.addEventListener('click', handleJoinSession);
-
-        el.sessionCode.addEventListener('input', () => {
-            const code = el.sessionCode.value.trim().toUpperCase();
-            el.sessionCode.value = code;
-            currentSession = null;
-            el.sessionInfo.innerHTML = '';
-            el.sessionError.textContent = '';
-        });
-
-        el.sessionCode.addEventListener('blur', checkSession);
-
-        el.sessionCode.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                handleJoinSession();
-            }
-        });
-
-        // Focus on input
-        el.sessionCode.focus();
-    </script>
+    loadSessions();
+    setInterval(loadSessions, 5000);
+  </script>
 </body>
-
 </html>

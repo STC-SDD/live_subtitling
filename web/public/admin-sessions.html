@@ -28,6 +28,7 @@
         .session-status { padding: 2px 8px; border-radius: 3px; font-size: 0.75em; font-weight: 600; text-transform: uppercase; }
         .session-status.pending { background: #f39c12; color: #000; }
         .session-status.active { background: #2ecc71; color: #000; }
+        .session-status.ended { background: #7f8c8d; color: #000; }
         .session-actions { display: flex; gap: 8px; }
         
         /* Modal simple */
@@ -150,9 +151,11 @@
                             ${s.status === 'pending' ? `
                                 <button class="btn btn-primary" onclick="startSession('${s.id}')">Configurer & Lancer</button>
                                 <button class="btn btn-danger" onclick="deleteSession('${s.id}')">Supprimer</button>
-                            ` : `
+                            ` : (s.status === 'active' ? `
                                 <button class="btn" onclick="location.href='/admin.html?session=${s.id}'" style="background:#2ecc71;">Gérer le Direct</button>
-                            `}
+                            ` : `
+                                <button class="btn btn-danger" onclick="deleteSession('${s.id}')">Supprimer</button>
+                            `)}
                         </div>
                     </div>
                 `).join('');

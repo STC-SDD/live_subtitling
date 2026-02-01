@@ -391,7 +391,12 @@ function handleMessage(ws, data) {
 }
 
 function handleIdentify(ws, msg) {
-  const { clientType, token, sessionId } = msg;
+  let { clientType, token, sessionId } = msg;
+
+  // Normalize sessionId if provided
+  if (sessionId && typeof sessionId === 'string') {
+    sessionId = sessionId.trim().toUpperCase();
+  }
 
   if (!['admin', 'subtitler', 'spectator'].includes(clientType)) return;
 

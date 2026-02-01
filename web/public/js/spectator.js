@@ -315,6 +315,11 @@ const state = {
 
 const el = {};
 
+function normalizeSessionId(id) {
+  return String(id || '').trim().toUpperCase();
+}
+
+
 document.addEventListener('DOMContentLoaded', () => {
   el.video = document.getElementById('video');
   el.waitingScreen = document.getElementById('waitingScreen');
@@ -332,7 +337,9 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  state.sessionId = sessionId;
+  state.sessionId = normalizeSessionId(sessionId);
+  // keep storage normalized for next loads
+  if (sessionId !== state.sessionId) localStorage.setItem('spectator_session_id', state.sessionId);
   loadSessionInfo();
   initApp();
 });
@@ -430,6 +437,9 @@ function handleMessage(msg) {
         state.displayedCaptions = [];
         renderCaptions();
         if (state.hls) { state.hls.destroy(); state.hls = null; }
+        try { el.video.pause(); } catch (e) { }
+        el.video.removeAttribute('src');
+        el.video.load();
       }
       break;
 
