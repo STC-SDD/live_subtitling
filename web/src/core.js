@@ -357,20 +357,27 @@ export const getLiveTimestamp = () =>
   state.liveStartedAt ? Date.now() - state.liveStartedAt : null;
 
 export function resetFragment() {
-  if (state.fragment.slotTimer) clearTimeout(state.fragment.slotTimer);
-  if (state.fragment.notifyTimer) clearTimeout(state.fragment.notifyTimer);
-  if (state.fragment.graceTimer) clearTimeout(state.fragment.graceTimer);
-  if (state.fragment.schedulerTimer) {
-    clearInterval(state.fragment.schedulerTimer);
+  const f = state.fragment;
+
+  // 1. ARRÊT PHYSIQUE DE TOUS LES TIMERS INDIVIDUELS
+  if (f.slotTimer) clearTimeout(f.slotTimer);
+  if (f.notifyTimer) clearTimeout(f.notifyTimer);
+  if (f.graceTimer) clearTimeout(f.graceTimer);
+  if (f.schedulerTimer) clearInterval(f.schedulerTimer);
+
+  // 2. VIDAGE DU SET DE TIMERS (Crucial pour les pools)
+  if (f.slotTimers && f.slotTimers.size > 0) {
+    for (const t of f.slotTimers) {
+      clearTimeout(t);
+    }
+    f.slotTimers.clear(); // On vide le Set existant
   }
 
-  if (state.fragment.slotTimers && state.fragment.slotTimers.size) {
-    for (const t of state.fragment.slotTimers) clearTimeout(t);
-  }
+  const prevGrace = f.gracePeriodPercent;
+  const prevRequired = f.requiredSubtitlers;
+  const prevNbPools = f.nbPools; // N'oublie pas de garder nbPools !
 
-  const prevGrace = state.fragment.gracePeriodPercent;
-  const prevRequired = state.fragment.requiredSubtitlers;
-
+  // 3. RÉINITIALISATION COMPLÈTE
   state.fragment = {
     active: false,
     slotDuration: config.defaultSlotDuration,
@@ -378,6 +385,7 @@ export function resetFragment() {
     notifyBefore: config.defaultNotifyBefore,
     gracePeriodPercent: prevGrace || 20,
     requiredSubtitlers: prevRequired || 2,
+    nbPools: prevNbPools || 1, // Important pour tes tests
     subtitlers: new Map(),
     currentSlotIndex: 0,
     slotStartTime: null,
@@ -390,8 +398,9 @@ export function resetFragment() {
     captionsBySlot: [],
     fusedCaptions: [],
   };
-}
 
+  log.info('FRAGMENT', 'État réinitialisé et timers nettoyés.');
+}
 export function clearTimers() {
   if (state.fragment.slotTimer) {
     clearTimeout(state.fragment.slotTimer);

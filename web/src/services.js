@@ -388,130 +388,55 @@ export function getNextSubtitler() {
   return getSubtitlerForSlot(state.fragment.currentSlotIndex);
 }
 
-function getNextAssignedSlotInfo(subtitlerId) {
+// function getNextAssignedSlotInfo(subtitlerId) {
+//   const { fragment: f } = state;
+//   const active = getActiveSubtitlers();
+//   if (!active.length) return null;
+
+//   const latestSlot = f.captionsBySlot.length ? f.captionsBySlot[f.captionsBySlot.length - 1] : null;
+//   if (!latestSlot) return null;
+
+//   const stride = getFragmentStrideSeconds();
+//   const nextSlotStartMs = latestSlot.startTime + stride * 1000; // start time of slotIndex=f.currentSlotIndex
+
+//   // Find the next slot index assigned to this subtitler.
+//   // Search up to 2 full rotations to be safe if active list changes slightly.
+//   let targetIndex = null;
+//   for (let k = f.currentSlotIndex; k < f.currentSlotIndex + active.length * 2; k++) {
+//     const s = getSubtitlerForSlot(k);
+//     if (s?.id === subtitlerId) {
+//       targetIndex = k;
+//       break;
+//     }
+//   }
+//   if (targetIndex === null) return null;
+
+//   const offsetSlots = targetIndex - f.currentSlotIndex;
+//   const startMs = nextSlotStartMs + offsetSlots * stride * 1000;
+//   return { slotIndex: targetIndex, startMs };
+// }
+function getNextPoolSlotInfo(targetPoolIndex) {
   const { fragment: f } = state;
-  const active = getActiveSubtitlers();
-  if (!active.length) return null;
+  const nb = Math.max(1, parseInt(f.nbPools) || 1);
+  const strideMs = getFragmentStrideSeconds() * 1000;
+  const now = Date.now();
 
-  const latestSlot = f.captionsBySlot.length ? f.captionsBySlot[f.captionsBySlot.length - 1] : null;
-  if (!latestSlot) return null;
-
-  const stride = getFragmentStrideSeconds();
-  const nextSlotStartMs = latestSlot.startTime + stride * 1000; // start time of slotIndex=f.currentSlotIndex
-
-  // Find the next slot index assigned to this subtitler.
-  // Search up to 2 full rotations to be safe if active list changes slightly.
-  let targetIndex = null;
-  for (let k = f.currentSlotIndex; k < f.currentSlotIndex + active.length * 2; k++) {
-    const s = getSubtitlerForSlot(k);
-    if (s?.id === subtitlerId) {
-      targetIndex = k;
-      break;
-    }
+  // On cherche le prochain slotIndex qui correspond à ce pool
+  let nextSlotIndex = f.currentSlotIndex;
+  while (nextSlotIndex % nb !== targetPoolIndex) {
+    nextSlotIndex++;
   }
-  if (targetIndex === null) return null;
 
-  const offsetSlots = targetIndex - f.currentSlotIndex;
-  const startMs = nextSlotStartMs + offsetSlots * stride * 1000;
-  return { slotIndex: targetIndex, startMs };
+  // Calcul du temps de départ basé sur le dernier slot créé
+  const latestSlot = f.captionsBySlot[f.captionsBySlot.length - 1];
+  const baseTime = latestSlot ? latestSlot.startTime : now;
+  
+  const offset = nextSlotIndex - (latestSlot ? latestSlot.slotIndex : 0);
+  const startMs = baseTime + (offset * strideMs);
+
+  return { slotIndex: nextSlotIndex, startMs };
 }
 
-/** Broadcast fragment status to all relevant clients */
-// export function broadcastFragmentStatus() {
-//   const { fragment: f } = state;
-//   const active = getActiveSubtitlers();
-//   const current = getCurrentSubtitler();
-
-//   // Global status (admin-friendly): reflect the most recently started slot
-//   const latestSlot = f.captionsBySlot.length ? f.captionsBySlot[f.captionsBySlot.length - 1] : null;
-//   const globalStart = latestSlot?.startTime || f.slotStartTime;
-//   const elapsed = globalStart ? Math.floor((Date.now() - globalStart) / 1000) : 0;
-//   const totalSlotTime = f.slotDuration + Math.floor(f.slotDuration * f.gracePeriodPercent / 100);
-//   const remaining = Math.max(0, totalSlotTime - elapsed);
-//   const inGracePeriod = elapsed > f.slotDuration;
-  
-//   const status = {
-//     active: f.active,
-//     slotDuration: f.slotDuration,
-//     gracePeriodPercent: f.gracePeriodPercent,
-//     requiredSubtitlers: f.requiredSubtitlers,
-//     overlapDuration: f.overlapDuration,
-//     currentSlotIndex: f.currentSlotIndex,
-//     currentSubtitlerId: current?.id || null,
-//     currentSubtitlerName: current?.name || null,
-//     secondsRemaining: remaining,
-//     inGracePeriod,
-//     subtitlerCount: active.length,
-//     subtitlers: active.map(s => ({ id: s.id, name: s.name })),
-//   };
-/** Broadcast fragment status to all relevant clients (Pool version) */
-// export function broadcastFragmentStatus() {
-//   const { fragment: f } = state;
-//   const active = getActiveSubtitlers();
-  
-//   // 1. Calcul des infos globales (pour l'admin et le contexte général)
-//   const latestSlot = f.captionsBySlot.length ? f.captionsBySlot[f.captionsBySlot.length - 1] : null;
-//   const globalStart = latestSlot?.startTime || f.slotStartTime;
-//   const elapsed = globalStart ? Math.floor((Date.now() - globalStart) / 1000) : 0;
-  
-//   // On définit le statut de base
-//   const status = {
-//     active: f.active,
-//     currentSlotIndex: f.currentSlotIndex,
-//     subtitlerCount: active.length,
-//     subtitlers: active.map(s => ({ id: s.id, name: s.name })),
-//     // On peut ajouter ici l'ID du pool ou d'autres métadonnées
-//   };
-
-//   // 2. BOUCLE SUR CHAQUE SOUS-TITREUR ACTIF
-//   for (const s of active) {
-//     // MODIFICATION CLÉ : On vérifie si ce sous-titreur a un slot assigné dans la Map
-//     const assignedSlotIndex = f.openSlotBySubtitlerId?.get(s.id);
-    
-//     // On cherche l'objet slot correspondant dans l'historique
-//     const slot = Number.isFinite(assignedSlotIndex)
-//       ? f.captionsBySlot.find(x => x.slotIndex === assignedSlotIndex)
-//       : null;
-
-//     if (!slot) {
-//       // Cas où le sous-titreur attend son tour (pas de slot ouvert)
-//       const nextInfo = getNextAssignedSlotInfo(s.id);
-//       const waitSec = nextInfo ? Math.max(0, Math.floor((nextInfo.startMs - Date.now()) / 1000)) : 0;
-      
-//       send(s.ws, {
-//         type: 'fragment:status',
-//         ...status,
-//         secondsRemaining: waitSec,
-//         isMyTurn: false, // L'interface de saisie restera bloquée
-//         inGracePeriod: false,
-//       });
-//       continue;
-//     }
-
-//     // Cas où le sous-titreur est DANS LE POOL ACTIF
-//     const graceSec = Math.floor(f.slotDuration * f.gracePeriodPercent / 100);
-//     const deadlineMs = slot.startTime + (f.slotDuration + graceSec) * 1000;
-//     const now = Date.now();
-//     const perRemaining = Math.max(0, Math.floor((deadlineMs - now) / 1000));
-//     const perInGrace = (now - slot.startTime) / 1000 > f.slotDuration;
-
-//     // On lui envoie le signal d'activation
-//     send(s.ws, {
-//       type: 'fragment:status',
-//       ...status,
-//       secondsRemaining: perRemaining,
-//       inGracePeriod: perInGrace,
-//       isMyTurn: true, // CLÉ : débloque l'interface pour tous les membres du pool
-//       currentAssignedSlot: assignedSlotIndex
-//     });
-//   }
-
-//   // Notification Admin (optionnel)
-//   broadcastToAdmins({ 
-//     type: 'fragment:admin-status', 
-//     ...status,
-//     openSlotsCount: f.openSlotBySubtitlerId.size 
-//   });
 // }
 /** Broadcast fragment status to all relevant clients (Pool version) */
 /** Broadcast fragment status to all relevant clients (Pool version) */
@@ -538,19 +463,36 @@ export function broadcastFragmentStatus() {
 
     // Case 1: subtitler is waiting (no open slot)
     if (!slot) {
-      const nextInfo = getNextAssignedSlotInfo(s.id);
-      const waitSec = nextInfo
-        ? Math.max(0, Math.floor((nextInfo.startMs - Date.now()) / 1000))
-        : 0;
+      // const nextInfo = getNextAssignedSlotInfo(s.id);
+      // const waitSec = nextInfo
+      //   ? Math.max(0, Math.floor((nextInfo.startMs - Date.now()) / 1000))
+      //   : 0;
 
-      send(s.ws, {
-        type: 'fragment:status',
-        ...status,
-        secondsRemaining: waitSec,
-        isMyTurn: false,
-        inGracePeriod: false,
-      });
-      continue;
+      // send(s.ws, {
+      //   type: 'fragment:status',
+      //   ...status,
+      //   secondsRemaining: waitSec,
+      //   isMyTurn: false,
+      //   inGracePeriod: false,
+      // });
+      // continue;
+      const userPoolIndex = f.pools.findIndex(pool => pool.some(sub => sub.id === s.id));
+  
+  // 2. Calculer le temps pour CE POOL (et non pour cet ID)
+  const nextInfo = getNextPoolSlotInfo(userPoolIndex);
+  
+  let waitSec = 0;
+  if (nextInfo) {
+    waitSec = Math.max(0, Math.ceil((nextInfo.startMs - Date.now()) / 1000));
+  }
+
+  send(s.ws, {
+    type: 'fragment:status',
+    ...status,
+    secondsRemaining: waitSec, // Tout le pool aura le même chiffre !
+    isMyTurn: false,
+  });
+  continue;
     }
 
     // Case 2: subtitler has an active slot
@@ -651,434 +593,72 @@ export function validateFragmentConfig(requiredSubtitlers = state.fragment.requi
   return { ok: true };
 }
 
-/** Start the timer for the current slot */
-// function startNextSlot() {
-//   const { fragment: f } = state;
-//   const active = getActiveSubtitlers();
-//   if (active.length < f.requiredSubtitlers) {
-//     log.info('FRAGMENT', `En attente de sous-titreurs (${active.length}/${f.requiredSubtitlers})`);
-//     broadcastFragmentStatus();
-//     return;
-//   }
 
-//   const stride = getFragmentStrideSeconds();
-//   const graceSec = getFragmentGraceSeconds();
-//   const slotIndex = f.currentSlotIndex;
-//   const current = getSubtitlerForSlot(slotIndex);
-//   const next = getSubtitlerForSlot(slotIndex + 1);
-//   const startTime = Date.now();
-//   const slotStartTimestamp = state.liveStartedAt ? (Date.now() - state.liveStartedAt) : 0;
-
-//   f.slotStartTime = startTime;
-
-//   const newSlot = {
-//     slotIndex,
-//     subtitlerId: current?.id,
-//     subtitlerName: current?.name,
-//     startTime,
-//     startTimestamp: slotStartTimestamp,
-//     endTime: null,
-//     endTimestamp: null,
-//     captions: [],
-//     finalText: null,
-//     sent: false,
-//   };
-//   f.captionsBySlot.push(newSlot);
-//   const slotArrayIndex = f.captionsBySlot.length - 1;
-//   if (current?.id) f.openSlotBySubtitlerId.set(current.id, slotIndex);
-
-//   log.info('FRAGMENT', `════════════════════════════════════════`);
-//   log.info('FRAGMENT', `SLOT ${slotIndex} STARTED`);
-//   log.info('FRAGMENT', `  Subtitler: ${current?.name || 'N/A'}`);
-//   log.info('FRAGMENT', `  Video timestamp: ${formatTimestamp(slotStartTimestamp)}`);
-//   log.info('FRAGMENT', `  Stride: ${stride}s (slot=${f.slotDuration}s overlap=${f.overlapDuration}s)`);
-//   log.info('FRAGMENT', `  Submit deadline: +${f.slotDuration + graceSec}s (grace=${graceSec}s)`);
-//   log.info('FRAGMENT', `════════════════════════════════════════`);
-
-//   // Notify: current slot is ending soon (relative to its own end)
-//   const endingNotifyMs = (f.slotDuration - f.notifyBefore) * 1000;
-//   if (endingNotifyMs > 0) {
-//     const t = setTimeout(() => {
-//       if (current) send(current.ws, { type: 'fragment:ending', secondsLeft: f.notifyBefore });
-//       broadcastFragmentStatus();
-//     }, endingNotifyMs);
-//     f.slotTimers.add(t);
-//   }
-
-//   // Notify: next subtitler prepares before THEIR start (stride)
-//   const prepareNotifyMs = (stride - f.notifyBefore) * 1000;
-//   if (prepareNotifyMs > 0) {
-//     const t = setTimeout(() => {
-//       if (next) send(next.ws, { type: 'fragment:prepare', secondsLeft: f.notifyBefore });
-//       broadcastFragmentStatus();
-//     }, prepareNotifyMs);
-//     f.slotTimers.add(t);
-//   }
-
-//   // Grace starts after main slot duration
-//   const graceStartT = setTimeout(() => {
-//     if (current) send(current.ws, { type: 'fragment:grace-start', gracePeriodPercent: f.gracePeriodPercent });
-//     broadcastFragmentStatus();
-//   }, f.slotDuration * 1000);
-//   f.slotTimers.add(graceStartT);
-
-//   // Grace ends: auto-send + finalize + fusion
-//   const graceEndT = setTimeout(() => {
-//     if (current) send(current.ws, { type: 'fragment:auto-send' });
-
-//     newSlot.endTime = Date.now();
-//     newSlot.endTimestamp = state.liveStartedAt ? (Date.now() - state.liveStartedAt) : 0;
-
-//     // Close submission window immediately.
-//     // Auto captions are now fully tolerant and can still be attached via fallback.
-//     if (current?.id && f.openSlotBySubtitlerId.get(current.id) === slotIndex) {
-//       f.openSlotBySubtitlerId.delete(current.id);
-//     }
-
-//     // Give the client a moment to send the auto-caption before fusing/sending.
-//     const finalizeT = setTimeout(() => {
-//       processSlotEnd(slotArrayIndex);
-//       broadcastFragmentStatus();
-//     }, 800);
-//     f.slotTimers.add(finalizeT);
-//   }, (f.slotDuration + graceSec) * 1000);
-//   f.slotTimers.add(graceEndT);
-
-//   // Advance global slot index (next slot starts after stride)
-//   f.currentSlotIndex++;
-//   broadcastFragmentStatus();
-// }
-// async function startNextSlot() {
-//   const { fragment: f } = state;
-//   const active = getActiveSubtitlers();
-
-//   // 1. On garde la vérification du nombre minimum de sous-titreurs
-//   if (active.length < f.requiredSubtitlers) {
-//     log.info('FRAGMENT', `En attente de sous-titreurs (${active.length}/${f.requiredSubtitlers})`);
-//     broadcastFragmentStatus();
-//     return;
-//   }
-
-//   const stride = getFragmentStrideSeconds();
-//   const graceSec = getFragmentGraceSeconds();
-//   const slotIndex = f.currentSlotIndex;
-  
-//   const startTime = Date.now();
-//   const slotStartTimestamp = state.liveStartedAt ? (Date.now() - state.liveStartedAt) : 0;
-
-//   f.slotStartTime = startTime;
-
-//   // 2. CRÉATION DU SLOT (Structure prête pour le MSA)
-//   const newSlot = {
-//     slotIndex,
-//     poolMembers: active.map(s => ({ id: s.id, name: s.name })), // On stocke qui était dans le pool
-//     startTime,
-//     startTimestamp: slotStartTimestamp,
-//     endTime: null,
-//     endTimestamp: null,
-//     captions: [], // C'est ici que addCaptionToSlot va accumuler toutes les versions
-//     finalText: null,
-//     sent: false,
-//   };
-//   f.captionsBySlot.push(newSlot);
-//   const slotArrayIndex = f.captionsBySlot.length - 1;
-
-//   // 3. OUVERTURE DU SLOT POUR TOUT LE MONDE (La modification clé)
-//   // On autorise chaque membre du pool à soumettre pour cet index
-//   active.forEach(subtitler => {
-//     f.openSlotBySubtitlerId.set(subtitler.id, slotIndex);
-//   });
-
-//   log.info('FRAGMENT', `════════════════════════════════════════`);
-//   log.info('FRAGMENT', `SLOT ${slotIndex} STARTED (POOL MODE)`);
-//   log.info('FRAGMENT', `  Membres actifs: ${active.length}`);
-//   log.info('FRAGMENT', `  Deadline: +${f.slotDuration + graceSec}s`);
-//   log.info('FRAGMENT', `════════════════════════════════════════`);
-
-//   // 4. NOTIFICATIONS (On prévient tout le monde)
-//   active.forEach(subtitler => {
-//     send(subtitler.ws, { type: 'fragment:start', slotIndex, secondsLeft: f.slotDuration });
-//   });
-
-//   // Timer de notification "bientôt fini"
-//   const endingNotifyMs = (f.slotDuration - f.notifyBefore) * 1000;
-//   if (endingNotifyMs > 0) {
-//     const t = setTimeout(() => {
-//       active.forEach(s => send(s.ws, { type: 'fragment:ending', secondsLeft: f.notifyBefore }));
-//       broadcastFragmentStatus();
-//     }, endingNotifyMs);
-//     f.slotTimers.add(t);
-//   }
-
-//   // 5. FIN DU SLOT ET DÉCLENCHEMENT MSA/IA (Important: async/await)
-//   const graceEndT = setTimeout(async () => {
-//     // Demander l'envoi automatique aux clients
-//     active.forEach(s => send(s.ws, { type: 'fragment:auto-send' }));
-
-//     newSlot.endTime = Date.now();
-//     newSlot.endTimestamp = state.liveStartedAt ? (Date.now() - state.liveStartedAt) : 0;
-
-//     // Fermer les fenêtres de soumission pour ce slot
-//     active.forEach(subtitler => {
-//       if (f.openSlotBySubtitlerId.get(subtitler.id) === slotIndex) {
-//         f.openSlotBySubtitlerId.delete(subtitler.id);
-//       }
-//     });
-
-//     // On laisse un petit délai pour recevoir les derniers aut
-//     // o-sends
-//     const finalizeT = setTimeout(async () => {
-//       // ICI : On appelle ta nouvelle méthode processSlotEnd qui fait MSA + IA
-//       await processSlotEnd(slotArrayIndex);
-//       broadcastFragmentStatus();
-//     }, 1000); 
-//     f.slotTimers.add(finalizeT);
-//   }, (f.slotDuration + graceSec) * 1000);
-  
-//   f.slotTimers.add(graceEndT);
-
-//   f.currentSlotIndex++;
-//   broadcastFragmentStatus();
-// }
-/*export async function startNextSlot() {
-  const { fragment: f } = state;
-  
-  // 1. RECALCUL DES POOLS
-  refreshPools(); 
-  
-  const slotIndex = f.currentSlotIndex;
-  const nb = f.nbPools || 1;
-  const targetPoolIndex = slotIndex % nb; // L'alternance 0, 1, 0, 1...
-  const currentPool = f.pools[targetPoolIndex];
-
-  // Sécurité si un pool est vide
-  if (!currentPool || currentPool.length === 0) {
-    log.info('FRAGMENT', `Pool ${targetPoolIndex} vide, attente de reconnexion...`);
-    const t = setTimeout(() => startNextSlot(), 2000);
-    f.slotTimers.add(t);
-    return;
-  }
-
-  const graceSec = Math.floor(f.slotDuration * (f.gracePeriodPercent / 100));
-  const strideMs = getFragmentStrideSeconds() * 1000; // Délai avant le prochain pool
-  const startTime = Date.now();
-
-  // 2. CRÉATION DU SLOT
-  const newSlot = {
-    slotIndex,
-    poolId: targetPoolIndex,
-    poolMembers: currentPool.map(s => ({ id: s.id, name: s.name })),
-    startTime,
-    startTimestamp: state.liveStartedAt ? (Date.now() - state.liveStartedAt) : 0,
-    captions: [], 
-    sent: false,
-  };
-  f.captionsBySlot.push(newSlot);
-  const slotArrayIndex = f.captionsBySlot.length - 1;
-
-  // 3. OUVERTURE ET NOTIFICATION DU POOL ACTIF
-  currentPool.forEach(sub => {
-    f.openSlotBySubtitlerId.set(sub.id, slotIndex);
-    send(sub.ws, { type: 'fragment:start', slotIndex, secondsLeft: f.slotDuration });
-  });
-
-  log.info('FRAGMENT', `[SLOT ${slotIndex}] STARTED -> POOL ${targetPoolIndex}`);
-
-  // 4. PLANIFICATION DU PROCHAIN SLOT (Le relais)
-  // C'est cette ligne qui remplace le setInterval et évite le bug du timer
-  const nextSlotT = setTimeout(() => {
-    if (f.active) startNextSlot();
-  }, strideMs);
-  f.slotTimers.add(nextSlotT);
-
-  // 5. FIN DU SLOT ET TRAITEMENT MSA/IA
-  const graceEndT = setTimeout(async () => {
-    currentPool.forEach(s => send(s.ws, { type: 'fragment:auto-send' }));
-
-    // Fermeture des accès pour ce pool
-    currentPool.forEach(sub => {
-      f.openSlotBySubtitlerId.delete(sub.id);
-    });
-
-    // Délai de 1s pour recevoir les derniers paquets avant fusion
-    const finalizeT = setTimeout(async () => {
-      await processSlotEnd(slotArrayIndex); // Ici se font MSA et IA
-      broadcastFragmentStatus();
-    }, 1000); 
-    f.slotTimers.add(finalizeT);
-  }, (f.slotDuration + graceSec) * 1000);
-  
-  f.slotTimers.add(graceEndT);
-
-  // CRUCIAL : On incrémente l'index pour le prochain passage de relais
-  f.currentSlotIndex++; 
-  broadcastFragmentStatus();
-}*/
 export async function startNextSlot() {
   const { fragment: f } = state;
-  
-  // 1. MISE À JOUR DES POOLS
-  refreshPools(); 
+  if (!f.active) return; // Sécurité si on a arrêté le mode entre-temps
 
+  refreshPools(); 
   const slotIndex = f.currentSlotIndex;
-  // SÉCURITÉ MODULO : On s'assure que nbPools est un nombre valide >= 1
   const nb = Math.max(1, parseInt(f.nbPools) || 1); 
   const targetPoolIndex = slotIndex % nb; 
-  const currentPool = f.pools[targetPoolIndex];
+  let currentPool = f.pools[targetPoolIndex];
 
-  // 2. SÉCURITÉ POOL VIDE
-  // Si le pool est vide (ex: déconnexion), on ne s'arrête pas, on réessaie plus tard
+  // MODIF 2 : Gestion de l'absence d'utilisateurs (Mode survie)
   if (!currentPool || currentPool.length === 0) {
-    log.warn('FRAGMENT', `Pool ${targetPoolIndex} vide. Relance dans 2s...`);
-    const retryT = setTimeout(() => {
-      if (f.active) startNextSlot();
-    }, 2000);
-    f.slotTimers.add(retryT);
-    return;
+    const allActive = getActiveSubtitlers();
+    if (allActive.length > 0) {
+      currentPool = [allActive[0]]; // On force le premier disponible
+    } else {
+      // Vraiment personne ? On retente proprement sans spammer
+      const retryT = setTimeout(() => { if (f.active) startNextSlot(); }, 2000);
+      f.slotTimers.add(retryT);
+      return;
+    }
   }
 
-  // 3. PARAMÈTRES DE TEMPS
-  const graceSec = Math.floor(f.slotDuration * (f.gracePeriodPercent / 100));
   const strideMs = getFragmentStrideSeconds() * 1000;
   const startTime = Date.now();
 
-  // 4. CRÉATION DU SLOT DANS L'HISTORIQUE
   const newSlot = {
     slotIndex,
     poolId: targetPoolIndex,
-    poolMembers: currentPool.map(s => ({ id: s.id, name: s.name })),
     startTime,
-    startTimestamp: state.liveStartedAt ? (Date.now() - state.liveStartedAt) : 0,
     captions: [], 
     finalText: null,
-    sent: false,
   };
   f.captionsBySlot.push(newSlot);
   const slotArrayIndex = f.captionsBySlot.length - 1;
 
-  // 5. OUVERTURE ET NOTIFICATION (Seul le pool actif reçoit le signal)
   currentPool.forEach(sub => {
     f.openSlotBySubtitlerId.set(sub.id, slotIndex);
     send(sub.ws, { type: 'fragment:start', slotIndex, secondsLeft: f.slotDuration });
   });
 
-  log.info('FRAGMENT', `[SLOT ${slotIndex}] POOL ${targetPoolIndex} ACTIF (${currentPool.length} membres)`);
-
-  // 6. LE RELAIS (Remplace le setInterval pour éviter les sauts de timer)
+  // MODIF 3 : Le relais sans reset. On ne fait JAMAIS de clearTimers ici.
   const nextSlotT = setTimeout(() => {
     if (f.active) startNextSlot();
   }, strideMs);
   f.slotTimers.add(nextSlotT);
 
-  // 7. FIN DU SLOT ET TRAITEMENT MSA/IA
+  // Fin du slot (MSA + IA)
+  const graceSec = getFragmentGraceSeconds();
   const graceEndT = setTimeout(async () => {
-    currentPool.forEach(s => send(s.ws, { type: 'fragment:auto-send' }));
-
-    // Fermeture des accès
-    currentPool.forEach(sub => {
-      f.openSlotBySubtitlerId.delete(sub.id);
-    });
-
-    // Délai de 1s pour laisser le réseau finir avant MSA + IA
-    const finalizeT = setTimeout(async () => {
-      await processSlotEnd(slotArrayIndex);
-      broadcastFragmentStatus();
-    }, 1000); 
-    f.slotTimers.add(finalizeT);
+    currentPool.forEach(sub => f.openSlotBySubtitlerId.delete(sub.id));
+    await processSlotEnd(slotArrayIndex);
+    broadcastFragmentStatus();
   }, (f.slotDuration + graceSec) * 1000);
   
   f.slotTimers.add(graceEndT);
-
-  // CRUCIAL : Incrémentation pour le prochain tour
   f.currentSlotIndex++; 
-  broadcastFragmentStatus();
 }
 
-/**
- * clearTimers - Pour tout arrêter proprement
- */
-/**
- * clearTimers - Version unique et centralisée
- */
-export function clearTimers() {
-  const { fragment: f } = state;
 
-  // 1. Nettoyer le Set de timers (setTimeout du stride, de la grâce, etc.)
-  if (f.slotTimers) {
-    f.slotTimers.forEach(t => clearTimeout(t));
-    f.slotTimers.clear();
-  }
 
-  // 2. Nettoyer les anciens timers individuels s'ils existent encore
-  if (f.schedulerTimer) clearInterval(f.schedulerTimer);
-  if (f.slotTimer) clearTimeout(f.slotTimer);
-  if (f.notifyTimer) clearTimeout(f.notifyTimer);
-  if (f.graceTimer) clearTimeout(f.graceTimer);
-
-  // 3. Réinitialiser les accès
-  f.openSlotBySubtitlerId.clear();
-
-  log.info('CLEANUP', 'Tous les timers et accès ont été réinitialisés.');
-}
-
-export function startSlotTimer() {
-  // Backward-compatible alias (older code calls startSlotTimer)
-  return startFragmentScheduler();
-}
-
-// export function startFragmentScheduler() {
-//   const { fragment: f } = state;
-//   clearTimers();
-
-//   const validation = validateFragmentConfig(f.requiredSubtitlers);
-//   if (!validation.ok) {
-//     log.warn('FRAGMENT', validation.error);
-//     broadcastToAdmins({ type: 'fragment:error', error: validation.error });
-//     broadcastFragmentStatus();
-//     return;
-//   }
-
-//   const active = getActiveSubtitlers();
-//   if (active.length < f.requiredSubtitlers) {
-//     log.info('FRAGMENT', `En attente de sous-titreurs (${active.length}/${f.requiredSubtitlers})`);
-//     broadcastFragmentStatus();
-//     return;
-//   }
-
-//   const stride = getFragmentStrideSeconds();
-//   startNextSlot();
-//   f.schedulerTimer = setInterval(() => {
-//     startNextSlot();
-//   }, stride * 1000);
-// }
-export function startFragmentScheduler() {
-  const { fragment: f } = state;
-  clearTimers(); // S'assure qu'aucun vieux timer ne traîne
-
-  const validation = validateFragmentConfig(f.requiredSubtitlers);
-  if (!validation.ok) {
-    log.warn('FRAGMENT', validation.error);
-    broadcastToAdmins({ type: 'fragment:error', error: validation.error });
-    broadcastFragmentStatus();
-    return;
-  }
-
-  const active = getActiveSubtitlers();
-  if (active.length < f.requiredSubtitlers) {
-    log.info('FRAGMENT', `En attente de sous-titreurs (${active.length}/${f.requiredSubtitlers})`);
-    broadcastFragmentStatus();
-    return;
-  }
-
-  f.active = true; // On active le mode fragment
-  f.currentSlotIndex = 0; // On repart de zéro
-  
-  // ON LANCE UNIQUEMENT LE PREMIER SLOT
-  // startNextSlot s'occupera lui-même de planifier le suivant avec setTimeout
-  startNextSlot(); 
-}
+/** Start fragment mode */
 /** Start fragment mode */
 export function startFragmentMode() {
+  // PROTECTION 1 : Si c'est déjà lancé, on ne touche à rien !
   if (state.fragment.active) return;
   
   state.fragment.active = true;
@@ -1092,138 +672,79 @@ export function startFragmentMode() {
   log.info('FRAGMENT', 'Fragment mode started');
 }
 
+export function startFragmentScheduler() {
+  const { fragment: f } = state;
+
+  // MODIF 1 : Le verrou de sécurité. Si c'est déjà actif, on ne touche à rien.
+  // C'est CA qui règle ton problème de réinitialisation au milieu.
+  if (f.active && f.captionsBySlot.length > 0) {
+    log.info('FRAGMENT', 'Le scheduler est déjà en cours. On ignore la demande de reset.');
+    return;
+  }
+
+  // On ne nettoie QUE si on démarre pour la toute première fois
+  clearTimers(); 
+
+  const validation = validateFragmentConfig(f.requiredSubtitlers);
+  if (!validation.ok) {
+    log.warn('FRAGMENT', validation.error);
+    broadcastToAdmins({ type: 'fragment:error', error: validation.error });
+    broadcastFragmentStatus();
+    return;
+  }
+
+  const active = getActiveSubtitlers();
+  if (active.length < f.requiredSubtitlers) {
+    log.info('FRAGMENT', `Attente de sous-titreurs (${active.length}/${f.requiredSubtitlers})`);
+    broadcastFragmentStatus();
+    return;
+  }
+
+  f.active = true;
+  f.currentSlotIndex = 0; 
+  
+  startNextSlot(); 
+}
 /** Stop fragment mode */
 export function stopFragmentMode() {
   if (!state.fragment.active) return;
   
-  // Send any remaining unsent slots
+  // 1. ARRÊT PHYSIQUE DES TIMERS
+  // Indispensable pour que startNextSlot ne se rappelle pas dans 2 secondes
+  clearTimers(); 
+
+  // 2. ENVOI DES DERNIERS TEXTES
   sendRemainingSlots();
   
+  // 3. RÉINITIALISATION DE L'ÉTAT
   resetFragment();
+
+  // 4. NOTIFICATION ET LOGS
+  state.fragment.active = false; // On s'assure que c'est bien à false
   broadcast({ type: 'fragment:stopped' });
   log.info('FRAGMENT', 'Fragment mode stopped');
 }
+function clearTimers() {
+  const { fragment: f } = state;
 
-/** Add caption to the current slot (only from assigned subtitler) */
-// export function addCaptionToSlot(caption) {
-//   const { fragment: f } = state;
-//   if (!f.active) return false;
+  log.info('FRAGMENT', 'Nettoyage complet des timers en cours...');
 
-//   const slotIndex = f.openSlotBySubtitlerId?.get(caption.subtitlerId);
-//   const graceSec = getFragmentGraceSeconds();
-//   let currentSlot = Number.isFinite(slotIndex)
-//     ? f.captionsBySlot.find(s => s.slotIndex === slotIndex)
-//     : null;
+  // 1. On arrête tous les timeouts stockés dans le Set
+  if (f.slotTimers instanceof Set) {
+    f.slotTimers.forEach(t => clearTimeout(t));
+    f.slotTimers.clear();
+  } else {
+    // Si slotTimers n'était pas un Set, on le crée pour la suite
+    f.slotTimers = new Set();
+  }
 
-//   // Robust fallback: if mapping is missing (race around auto-send),
-//   // accept into the most recent slot for this subtitler.
-//   if (!currentSlot) {
-//     for (let i = f.captionsBySlot.length - 1; i >= 0; i--) {
-//       const candidate = f.captionsBySlot[i];
-//       if (!candidate) continue;
-//       if (candidate.subtitlerId !== caption.subtitlerId) continue;
-
-//       // For manual captions, we only accept within deadline.
-//       // For auto captions, accept even if it arrives late.
-//       if (caption.autoSent) {
-//         currentSlot = candidate;
-//         break;
-//       }
-
-//       const candidateDeadline = candidate.startTime + (f.slotDuration + graceSec) * 1000;
-//       if (Date.now() <= candidateDeadline) {
-//         currentSlot = candidate;
-//         break;
-//       }
-//     }
-//   }
-
-//   if (!currentSlot) {
-//     log.warn('CAPTION', `REJECTED - No open slot for ${caption.subtitlerName} (${caption.subtitlerId})`);
-//     return false;
-//   }
-
-//   const deadline = currentSlot.startTime + (f.slotDuration + graceSec) * 1000;
-//   if (!caption.autoSent && Date.now() > deadline) {
-//     log.warn('CAPTION', `[Slot ${currentSlot.slotIndex}] REJECTED - Deadline passed`);
-//     return false;
-//   }
-
-//   // Timestamp is based on slot start, capped at slot end (excluding grace)
-//   const elapsedMs = Date.now() - currentSlot.startTime;
-//   const cappedMs = Math.min(elapsedMs, f.slotDuration * 1000);
-//   const videoTimestamp = currentSlot.startTimestamp + cappedMs;
-//   const captionWithTimestamp = {
-//     ...caption,
-//     videoTimestamp,
-//     slotIndex: currentSlot.slotIndex,
-//     receivedAt: Date.now(),
-//   };
+  // 2. On nettoie les variables individuelles si tu en utilises
+  if (f.currentTimer) clearTimeout(f.currentTimer);
+  if (f.slotTimeout) clearTimeout(f.slotTimeout);
   
-//   currentSlot.captions.push(captionWithTimestamp);
-  
-//   // Log
-//   log.info('CAPTION', `[Slot ${currentSlot.slotIndex}] [${formatTimestamp(videoTimestamp)}] "${caption.text}" (par ${caption.subtitlerName})`);
-  
-//   // Notify admins immediately
-//   broadcastToAdmins({
-//     type: 'fragment:raw-caption',
-//     caption: captionWithTimestamp,
-//     slotIndex: currentSlot.slotIndex,
-//   });
-  
-//   return true;
-// }
-
-// export function addCaptionToSlot(caption) {
-//   const { fragment: f } = state;
-//   if (!f.active) return false;
-
-//   // 1. ON GARDE TA LOGIQUE : Trouver le bon slot pour ce sous-titreur
-//   const slotIndex = f.openSlotBySubtitlerId?.get(caption.subtitlerId);
-//   const graceSec = getFragmentGraceSeconds();
-//   let currentSlot = Number.isFinite(slotIndex)
-//     ? f.captionsBySlot.find(s => s.slotIndex === slotIndex)
-//     : null;
-
-//   // FALLBACK ROBUSTE (On garde ton code ici)
-//   if (!currentSlot) {
-//     for (let i = f.captionsBySlot.length - 1; i >= 0; i--) {
-//       const candidate = f.captionsBySlot[i];
-//       if (!candidate || candidate.subtitlerId !== caption.subtitlerId) continue;
-      
-//       if (caption.autoSent) { currentSlot = candidate; break; }
-
-//       const candidateDeadline = candidate.startTime + (f.slotDuration + graceSec) * 1000;
-//       if (Date.now() <= candidateDeadline) { currentSlot = candidate; break; }
-//     }
-//   }
-
-//   if (!currentSlot) {
-//     log.warn('CAPTION', `REJECTED - No open slot for ${caption.subtitlerName}`);
-//     return false;
-//   }
-
-//   // 2. ON GARDE TA SÉCURITÉ : Vérification de la deadline
-//   const deadline = currentSlot.startTime + (f.slotDuration + graceSec) * 1000;
-//   if (!caption.autoSent && Date.now() > deadline) {
-//     log.warn('CAPTION', `[Slot ${currentSlot.slotIndex}] REJECTED - Deadline passed`);
-//     return false;
-//   }
-
-//   // 3. ON GARDE TON CALCUL : Timestamp vidéo précis
-//   const elapsedMs = Date.now() - currentSlot.startTime;
-//   const cappedMs = Math.min(elapsedMs, f.slotDuration * 1000);
-//   const videoTimestamp = currentSlot.startTimestamp + cappedMs;
-
-//   const captionWithTimestamp = {
-//     ...caption,
-//     videoTimestamp,
-//     slotIndex: currentSlot.slotIndex,
-//     receivedAt: Date.now(),
-//   };
-// src/services.js
-
+  f.currentTimer = null;
+  f.slotTimeout = null;
+}
 export function addCaptionToSlot(caption) {
   const { fragment: f } = state;
   if (!f.active) return false;
@@ -1290,61 +811,7 @@ export function addCaptionToSlot(caption) {
   return true;
 }
 
-//   // 4. LA MODIFICATION POUR LE MSA : 
-//   // Au lieu de juste faire un .push(), on s'assure que le slot peut recevoir
-//   // plusieurs contributions de différentes personnes pour le même index.
-//   currentSlot.captions.push(captionWithTimestamp);
 
-//   // OPTIONNEL : Si tu veux faciliter le MSA plus tard, 
-//   // tu peux déjà marquer le texte comme "en attente de consensus"
-  
-//   log.info('CAPTION', `[Slot ${currentSlot.slotIndex}] Contribution reçue de ${caption.subtitlerName}: "${caption.text}"`);
-
-//   broadcastToAdmins({
-//     type: 'fragment:raw-caption',
-//     caption: captionWithTimestamp,
-//     slotIndex: currentSlot.slotIndex,
-//   });
-
-//   return true;
-// }
-
-// src/services.js
-// export function addCaptionToSlot(caption) {
-//   const { fragment: f } = state;
-//   if (!f.active) return false;
-
-//   // 1. Trouver le slot correspondant à l'index actuel
-//   const currentSlot = f.captionsBySlot.find(s => s.slotIndex === f.currentSlotIndex - 1);
-
-//   if (!currentSlot) return false;
-
-//   // 2. Vérifier si le sous-titreur appartient au bon Pool (optionnel selon votre logique)
-//   // 3. Ajouter la contribution au tableau (au lieu d'écraser)
-//   const contribution = {
-//     userId: caption.subtitlerId,
-//     userName: caption.subtitlerName,
-//     text: caption.text,
-//     receivedAt: Date.now()
-//   };
-
-//   currentSlot.contributions.push(contribution); // On stocke tout pour le MSA
-  
-//   // Notification admin pour voir les entrées en temps réel
-//   broadcastToAdmins({ type: 'fragment:new-contribution', slotIndex: currentSlot.slotIndex, contribution });
-  
-//   return true;
-// }
-/**
- * findOverlap - Detect overlap between two word sequences
- *
- * Checks if the END of seq1 matches the START of seq2.
- * This is the core of the fusion algorithm.
- *
- * EXAMPLE:
- *   seq1: ["grande", "ville", "La", "France"]
- *   seq2: ["La", "France", "est", "belle"]
-// FUSION ENGINE - Remove repetitions between consecutive slots
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /**
@@ -1574,104 +1041,7 @@ function getSlotRawText(slot) {
 //   const endedSlot = slots[endedSlotIndex];
 //   if (!endedSlot) return;
 //   const endedText = getSlotRawText(endedSlot);
-  
-//   log.info('FUSION', `════════════════════════════════════════`);
-//   log.info('FUSION', `END SLOT ${endedSlot.slotIndex} PROCESSING`);
-//   log.info('FUSION', `  Raw text: "${endedText || '(empty)'}"`);
-  
-//   // SPECIAL CASE: First slot (index 0) — send immediately (no predecessor)
-//   if (endedSlotIndex === 0) {
-//     if (endedText) {
-//       log.info('FUSION', `  First slot - SEND IMMEDIATELY (no predecessor)`);
-//       endedSlot.finalText = endedText;
-//       endedSlot.sent = true;
-//       sendToSpectators(endedSlot, endedText);
-//       storeFusedCaption(endedSlot, endedText, null, 0);
-//     } else {
-//       log.info('FUSION', `  First slot empty - nothing to send`);
-//       endedSlot.sent = true;
-//       endedSlot.finalText = '';
-//     }
-//     log.info('FUSION', `════════════════════════════════════════`);
-//     return;
-//   }
-  
-//   // Get previous slot (the one we're going to send now)
-//   const prevSlot = slots[endedSlotIndex - 1];
-//   const prevText = getSlotRawText(prevSlot);
-  
-//   log.info('FUSION', `  Previous slot ${prevSlot.slotIndex}: "${prevText || '(empty)'}"`);
-//   log.info('FUSION', `  Current slot ${endedSlot.slotIndex}: "${endedText || '(empty)'}"`);
-  
-//   // Tokenize both texts to compute overlap
-//   const prevWords = tokenize(prevText);
-//   const currentWords = tokenize(endedText);
-  
-//   // Detect overlap between END of previous slot and START of current slot
-//   // (do this even if previous slot was already sent to compute current overlap)
-//   if (currentWords.length > 0 && prevWords.length > 0) {
-//     const { overlapLength, overlapWords } = findOverlap(prevWords, currentWords);
-    
-//     if (overlapLength > 0) {
-//       log.info('FUSION', `  Overlap detected: ${overlapLength} words "${detokenize(overlapWords)}"`);
-//       endedSlot.overlapFromPrev = overlapLength;
-//     } else {
-//       log.info('FUSION', `  No overlap`);
-//       endedSlot.overlapFromPrev = 0;
-//     }
-//   } else {
-//     endedSlot.overlapFromPrev = 0;
-//   }
-  
-//   // If previous slot is already sent (slot 0 case), stop here
-//   // Overlap has been computed for the current slot
-//   if (prevSlot.sent) {
-//     log.info('FUSION', `  Slot ${prevSlot.slotIndex} already sent - overlap computed for slot ${endedSlot.slotIndex}`);
-//     log.info('FUSION', `════════════════════════════════════════`);
-//     return;
-//   }
-  
-//   // If previous slot is empty, nothing to send
-//   if (!prevText) {
-//     log.info('FUSION', `  Nothing to send (previous slot empty)`);
-//     prevSlot.sent = true;
-//     prevSlot.finalText = '';
-//     log.info('FUSION', `════════════════════════════════════════`);
-//     return;
-//   }
-  
-//   // Calculate text to send
-//   let wordsToSend = prevWords;
-  
-//   // If the previous slot had overlap with its own predecessor,
-//   // remove those words from its start
-//   if (prevSlot.overlapFromPrev && prevSlot.overlapFromPrev > 0) {
-//     log.info('FUSION', `  Slot ${prevSlot.slotIndex} adjusted: removing ${prevSlot.overlapFromPrev} words from beginning`);
-//     wordsToSend = prevWords.slice(prevSlot.overlapFromPrev);
-//   }
-  
-//   // Text to send
-//   const textToSend = detokenize(wordsToSend);
-//   prevSlot.finalText = textToSend;
-//   prevSlot.sent = true;
-  
-//   log.info('FUSION', `  ENVOI Slot ${prevSlot.slotIndex}: "${textToSend}"`);
-//   log.info('FUSION', `════════════════════════════════════════`);
-  
-//   // Send to spectators with delay
-//   sendToSpectators(prevSlot, textToSend);
-  
-//   // Store fused caption for history/export
-//   storeFusedCaption(prevSlot, textToSend, endedSlot, endedSlot.overlapFromPrev || 0);
-// }
 
-/**
- * processSlotEnd - Traite la fin d'un slot avec Consensus MSA, Correction IA et Fusion
- */
-/**
- * refreshPools - Répartit les sous-titreurs connectés dans les pools
- * en fonction du nombre de pools défini par l'admin.
- */
 export function refreshPools() {
   const { fragment: f } = state;
   const active = Array.from(f.subtitlers.values()); 
