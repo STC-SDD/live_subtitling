@@ -651,9 +651,18 @@ export async function startNextSlot() {
   // Fin du slot (MSA + IA)
   const graceSec = getFragmentGraceSeconds();
   const graceEndT = setTimeout(async () => {
-    currentPool.forEach(sub => f.openSlotBySubtitlerId.delete(sub.id));
-    await processSlotEnd(slotArrayIndex);
-    broadcastFragmentStatus();
+    // Send auto-send signal to all subtitlers in this pool
+    currentPool.forEach(sub => {
+      send(sub.ws, { type: 'fragment:auto-send' });
+      f.openSlotBySubtitlerId.delete(sub.id);
+    });
+
+    // Give the client a moment to send the auto-caption before processing
+    const finalizeT = setTimeout(async () => {
+      await processSlotEnd(slotArrayIndex);
+      broadcastFragmentStatus();
+    }, 800);
+    f.slotTimers.add(finalizeT);
   }, (f.slotDuration + graceSec) * 1000);
   
   f.slotTimers.add(graceEndT);
