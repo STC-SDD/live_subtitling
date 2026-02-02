@@ -482,18 +482,25 @@ function createPlayer() {
 }
 
 function displayFullCaption(text) {
-  console.log(`[Caption] Full text: "${text.slice(0, 50)}..."`);
+  console.log(`[Caption] Full text: "${text}"`);
 
-  const id = 'legacy_' + Date.now();
+  const id = 'caption_' + Date.now();
   state.activeCaptions.set(id, {
     words: text.split(/\s+/),
     totalWords: text.split(/\s+/).length,
     displayedAt: Date.now(),
     complete: true,
+    completedAt: Date.now(),
   });
 
   cleanupOldCaptions();
   renderCaptions();
+
+  // Supprimer après la durée d'affichage
+  setTimeout(() => {
+    state.activeCaptions.delete(id);
+    renderCaptions();
+  }, state.captionDuration);
 }
 
 function displayWord(caption) {
@@ -520,14 +527,16 @@ function displayWord(caption) {
     entry.completedAt = Date.now();
     console.log(`[Caption] Caption complete: "${entry.words.join(' ')}"`);
 
+    // Afficher la phrase complète maintenant
+    cleanupOldCaptions();
+    renderCaptions();
+
     setTimeout(() => {
       state.activeCaptions.delete(id);
       renderCaptions();
     }, state.captionDuration);
   }
-
-  cleanupOldCaptions();
-  renderCaptions();
+  // Ne pas appeler renderCaptions() tant que la phrase n'est pas complète
 }
 
 function cleanupOldCaptions() {
@@ -555,6 +564,9 @@ function renderCaptions() {
   const lines = [];
 
   for (const [id, entry] of state.activeCaptions) {
+    // N'afficher que les phrases complètes
+    if (!entry.complete) continue;
+
     const displayWords = entry.words.filter(w => w !== '');
 
     if (displayWords.length > 0) {

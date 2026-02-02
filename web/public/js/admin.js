@@ -364,7 +364,6 @@ document.addEventListener('DOMContentLoaded', () => {
   el.duration = document.getElementById('duration');
   el.delay = document.getElementById('delay');
   el.videoSelect = document.getElementById('videoSelect');
-  el.requiredSubtitlers = document.getElementById('requiredSubtitlers');
   el.delayInput = document.getElementById('delayInput');
   el.slotDuration = document.getElementById('slotDuration');
   el.overlapDuration = document.getElementById('overlapDuration');
@@ -378,6 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
   el.controlMessage = document.getElementById('controlMessage');
   el.subtitlerCount = document.getElementById('subtitlerCount');
   el.subtitlerList = document.getElementById('subtitlerList');
+  el.nbPoolsInput = document.getElementById('nbPoolsInput');
   el.uploadArea = document.getElementById('uploadArea');
   el.fileInput = document.getElementById('fileInput');
   el.uploadMessage = document.getElementById('uploadMessage');
@@ -422,7 +422,6 @@ async function loadSession(sessionId) {
     // Pre-fill configuration
     const cfg = session.config || {};
     if (el.videoSelect) el.videoSelect.value = session.videoPath;
-    if (cfg.requiredSubtitlers) el.requiredSubtitlers.value = cfg.requiredSubtitlers;
     if (cfg.delaySec) el.delayInput.value = cfg.delaySec;
     if (cfg.slotDuration) el.slotDuration.value = cfg.slotDuration;
     if (cfg.overlapDuration) el.overlapDuration.value = cfg.overlapDuration;
@@ -520,19 +519,20 @@ function updateSubtitlers(msg) {
 
   updateRestInfoFromInputs();
 
-  const nbPools = msg.nbPools || 2;
+  // Toujours utiliser la valeur de l'input (le serveur ne connaît pas le choix de l'admin avant le live)
+  const nbPools = parseInt(el.nbPoolsInput?.value) || 2;
 
   // Render pools
   const poolsContainer = document.getElementById('poolsContainer');
-  const pools = msg.pools || [];
   const currentSlotIndex = msg.currentSlotIndex || 0;
   
-  if (pools.length > 0 && state.subtitlers.length > 0) {
-    // Find which pool is currently active (currentSlotIndex % nbPools)
+  // Utiliser les pools du serveur SEULEMENT si le live est actif
+  if (msg.active && msg.pools && msg.pools.length > 0) {
+    // Live actif avec pools du serveur
     const activePoolIndex = currentSlotIndex % nbPools;
     
-    poolsContainer.innerHTML = pools.map((pool, index) => {
-      const isActivePool = msg.active && index === activePoolIndex;
+    poolsContainer.innerHTML = msg.pools.map((pool, index) => {
+      const isActivePool = index === activePoolIndex;
       const subtitlerChips = pool.subtitlers.length > 0
         ? pool.subtitlers.map(s => 
             `<span class="subtitler-chip ${isActivePool ? 'active' : ''}">${STC.escapeHtml(s.name)}</span>`
@@ -550,23 +550,50 @@ function updateSubtitlers(msg) {
       `;
     }).join('');
   } else if (state.subtitlers.length === 0) {
-    poolsContainer.innerHTML = '<div style="color:#444;font-size:0.85em;">Aucun sous-titreur connecté</div>';
-  } else {
-    // Fallback: show subtitlers without pools
-    poolsContainer.innerHTML = `
+    // Aucun sous-titreur connecté - afficher les pools vides
+    poolsContainer.innerHTML = Array.from({ length: nbPools }, (_, index) => `
       <div class="pool-card">
-        <div class="pool-subtitlers">
-          ${state.subtitlers.map(s => 
-            `<span class="subtitler-chip">${STC.escapeHtml(s.name)}</span>`
-          ).join('')}
+        <div class="pool-header">
+          <span class="pool-title">Pool ${index + 1}</span>
+          <span class="pool-badge">En attente</span>
         </div>
+        <div class="pool-subtitlers"><span class="pool-empty">Aucun sous-titreur</span></div>
       </div>
-    `;
+    `).join('');
+  } else {
+    // Live pas encore actif - générer les pools côté client
+    const tempPools = Array.from({ length: nbPools }, () => []);
+    state.subtitlers.forEach((sub, index) => {
+      tempPools[index % nbPools].push(sub);
+    });
+    
+    poolsContainer.innerHTML = tempPools.map((pool, index) => {
+      const subtitlerChips = pool.length > 0
+        ? pool.map(s => `<span class="subtitler-chip">${STC.escapeHtml(s.name)}</span>`).join('')
+        : '<span class="pool-empty">Aucun sous-titreur</span>';
+      
+      return `
+        <div class="pool-card">
+          <div class="pool-header">
+            <span class="pool-title">Pool ${index + 1}</span>
+            <span class="pool-badge">En attente</span>
+          </div>
+          <div class="pool-subtitlers">${subtitlerChips}</div>
+        </div>
+      `;
+    }).join('');
   }
+}
 
-  if (state.subtitlers.length === 0) {
-    return;
-  }
+// Rafraîchir l'affichage des pools quand on change le nombre de pools (avant le live)
+function refreshPoolsDisplay() {
+  // Simuler un message de mise à jour avec les sous-titreurs actuels
+  updateSubtitlers({
+    subtitlers: state.subtitlers,
+    pools: [],
+    active: false,
+    nbPools: parseInt(el.nbPoolsInput?.value) || 2,
+  });
 }
 
 function formatTime(sec) {
@@ -580,29 +607,34 @@ function readNumber(inputEl, fallback) {
   return Number.isFinite(value) ? value : fallback;
 }
 
-function computeFragmentInfo({ requiredSubtitlers, slotDuration, overlapDuration, gracePeriodPercent }) {
+function computeFragmentInfo({ slotDuration, overlapDuration, gracePeriodPercent, nbPools = 1 }) {
   const stride = slotDuration - overlapDuration;
   const graceSec = (slotDuration * gracePeriodPercent) / 100;
-  const minSubtitlers = stride > 0 ? Math.ceil((slotDuration + graceSec) / stride) : Infinity;
-  const cycle = requiredSubtitlers * stride;
-  const rest = cycle - slotDuration;
+  const deadline = slotDuration + graceSec;
+  // Avec N pools, chaque pool est réassigné tous les N slots
+  // Le cycle pour un pool = stride × nbPools
+  const poolCycle = stride * nbPools;
+  // Config valide si le pool a le temps de finir avant d'être réassigné
+  const isValid = poolCycle >= deadline;
+  // Le repos = temps entre deux assignations du même pool - durée du slot
+  const rest = poolCycle - slotDuration;
 
-  return { stride, graceSec, minSubtitlers, cycle, rest };
+  return { stride, graceSec, deadline, poolCycle, rest, isValid };
 }
 
 function updateRestInfoFromInputs() {
   if (!el.restingTime || !el.cycleTime || !el.strideTime || !el.minSubtitlers) return;
 
-  const requiredSubtitlers = Math.max(1, Math.floor(readNumber(el.requiredSubtitlers, 2)));
   const slotDuration = Math.max(1, readNumber(el.slotDuration, 30));
   const overlapDuration = Math.max(0, readNumber(el.overlapDuration, 0));
   const gracePeriodPercent = Math.max(0, readNumber(el.gracePeriod, 0));
+  const nbPools = Math.max(1, Math.floor(readNumber(el.nbPoolsInput, 2)));
 
-  const { stride, minSubtitlers, cycle, rest } = computeFragmentInfo({
-    requiredSubtitlers,
+  const { stride, poolCycle, rest, isValid, deadline } = computeFragmentInfo({
     slotDuration,
     overlapDuration,
     gracePeriodPercent,
+    nbPools,
   });
 
   if (!(stride > 0)) {
@@ -613,14 +645,22 @@ function updateRestInfoFromInputs() {
     return;
   }
 
+  if (!isValid) {
+    el.restingTime.textContent = `Config invalide (cycle ${Math.round(poolCycle)}s < deadline ${Math.round(deadline)}s)`;
+    el.cycleTime.textContent = '-';
+    el.strideTime.textContent = '-';
+    el.minSubtitlers.textContent = 'Ajoutez des pools!';
+    return;
+  }
+
   const restSec = Math.max(0, Math.round(rest));
-  const cycleSec = Math.max(0, Math.round(cycle));
+  const poolCycleSec = Math.max(0, Math.round(poolCycle));
   const strideSec = Math.max(0, Math.round(stride));
 
   el.restingTime.textContent = formatTime(restSec);
-  el.cycleTime.textContent = formatTime(cycleSec);
+  el.cycleTime.textContent = formatTime(poolCycleSec);
   el.strideTime.textContent = `${strideSec}`;
-  el.minSubtitlers.textContent = Number.isFinite(minSubtitlers) ? `${minSubtitlers}` : '-';
+  el.minSubtitlers.textContent = `${nbPools} pools`;
 }
 
 // Status polling
@@ -662,10 +702,14 @@ function setupEvents() {
   el.startBtn.addEventListener('click', startLive);
   el.stopBtn.addEventListener('click', stopLive);
 
-  [el.requiredSubtitlers, el.slotDuration, el.overlapDuration, el.gracePeriod].forEach(input => {
+  [el.slotDuration, el.overlapDuration, el.gracePeriod, el.nbPoolsInput].forEach(input => {
     input?.addEventListener('input', updateRestInfoFromInputs);
     input?.addEventListener('change', updateRestInfoFromInputs);
   });
+
+  // Rafraîchir l'affichage des pools quand on change le nombre de pools
+  el.nbPoolsInput?.addEventListener('input', refreshPoolsDisplay);
+  el.nbPoolsInput?.addEventListener('change', refreshPoolsDisplay);
 
   el.uploadArea.addEventListener('click', () => el.fileInput.click());
   el.fileInput.addEventListener('change', handleUpload);
@@ -689,24 +733,27 @@ function setupEvents() {
 
 async function startLive() {
   const video = el.videoSelect.value;
-  const requiredSubtitlers = parseInt(el.requiredSubtitlers.value) || 2;
+  const nbPools = parseInt(el.nbPoolsInput?.value) || 2;
+  
+  // Calcul automatique : répartir les sous-titreurs connectés dans les pools
+  const connectedCount = state.subtitlers.length;
+  const subtitlersPerPool = Math.floor(connectedCount / nbPools);
 
-  // --- Préparation de l'objet de configuration commun ---
+  // Validation : au moins 1 sous-titreur par pool
+  if (subtitlersPerPool < 1) {
+    showMessage(el.controlMessage, `Pas assez de sous-titreurs. ${connectedCount} connectés pour ${nbPools} pools (minimum ${nbPools} requis).`, 'error');
+    return;
+  }
+
   const liveConfig = {
     source: video,
     delaySec: parseInt(el.delayInput.value) || 20,
     slotDuration: parseInt(el.slotDuration.value) || 30,
     overlapDuration: parseInt(el.overlapDuration.value) || 5,
     gracePeriodPercent: parseInt(el.gracePeriod.value) || 20,
-    requiredSubtitlers: requiredSubtitlers,
+    nbPools: nbPools,
     notifyBefore: 5,
   };
-
-  // Validation commune : nombre de sous-titreurs minimum
-  if (state.subtitlers.length < requiredSubtitlers) {
-    showMessage(el.controlMessage, `Il faut ${requiredSubtitlers} sous-titreurs (${state.subtitlers.length} connectés)`, 'error');
-    return;
-  }
 
   // --- CAS A : AVEC SESSION ---
   if (state.currentSessionId) {

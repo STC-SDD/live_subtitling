@@ -595,18 +595,17 @@ export function getMinSpectatorDelaySec() {
 }
 
 export function getFragmentMinRequiredSubtitlers() {
-  const { fragment: f } = state;
-  const stride = getFragmentStrideSeconds();
-  const grace = getFragmentGraceSeconds();
-  if (stride <= 0) return Infinity;
-  // Ensure a subtitler is not reassigned before their submit deadline
-  return Math.ceil((f.slotDuration + grace) / stride);
+  // Avec le système de pools où tous les membres travaillent ensemble,
+  // cette fonction retourne 1 car la contrainte est sur le poolCycle vs deadline
+  return 1;
 }
 
-export function validateFragmentConfig(requiredSubtitlers = state.fragment.requiredSubtitlers) {
+export function validateFragmentConfig(requiredSubtitlers = state.fragment.requiredSubtitlers, nbPools = state.fragment.nbPools) {
   const { fragment: f } = state;
   const stride = getFragmentStrideSeconds();
   const grace = getFragmentGraceSeconds();
+  const deadline = f.slotDuration + grace;
+  const poolCycle = stride * nbPools;
 
   if (!Number.isFinite(f.slotDuration) || f.slotDuration <= 0) {
     return { ok: false, error: 'slotDuration must be > 0' };
@@ -621,11 +620,18 @@ export function validateFragmentConfig(requiredSubtitlers = state.fragment.requi
     return { ok: false, error: 'gracePeriodPercent must be between 0 and 100' };
   }
 
-  const minRequired = getFragmentMinRequiredSubtitlers();
-  if (requiredSubtitlers < minRequired) {
+  // Validate nbPools
+  if (!Number.isFinite(nbPools) || nbPools < 1) {
+    return { ok: false, error: 'nbPools must be >= 1' };
+  }
+
+  // La contrainte principale : le pool doit avoir le temps de finir avant d'être réassigné
+  // poolCycle = temps entre deux slots pour le même pool
+  // deadline = slot + grace = temps avant que le pool puisse être réassigné
+  if (poolCycle < deadline) {
     return {
       ok: false,
-      error: `Invalid config for overlapping slots: need at least ${minRequired} subtitlers to avoid reassignment before submit deadline (stride=${stride}s, slot=${f.slotDuration}s, grace=${grace}s, deadline=${f.slotDuration + grace}s, cycle=${requiredSubtitlers * stride}s)`
+      error: `Invalid config: pool cycle (${poolCycle}s) < deadline (${deadline}s). Add more pools or reduce slot/grace duration. (stride=${stride}s, slot=${f.slotDuration}s, grace=${grace}s, nbPools=${nbPools})`
     };
   }
 
@@ -733,7 +739,7 @@ export function startFragmentScheduler() {
   // On ne nettoie QUE si on démarre pour la toute première fois
   clearTimers(); 
 
-  const validation = validateFragmentConfig(f.requiredSubtitlers);
+  const validation = validateFragmentConfig(f.requiredSubtitlers, f.nbPools);
   if (!validation.ok) {
     log.warn('FRAGMENT', validation.error);
     broadcastToAdmins({ type: 'fragment:error', error: validation.error });
@@ -742,8 +748,9 @@ export function startFragmentScheduler() {
   }
 
   const active = getActiveSubtitlers();
-  if (active.length < f.requiredSubtitlers) {
-    log.info('FRAGMENT', `Attente de sous-titreurs (${active.length}/${f.requiredSubtitlers})`);
+  const minTotal = f.requiredSubtitlers * f.nbPools;
+  if (active.length < minTotal) {
+    log.info('FRAGMENT', `Attente de sous-titreurs (${active.length}/${minTotal} requis: ${f.requiredSubtitlers}/pool × ${f.nbPools} pools)`);
     broadcastFragmentStatus();
     return;
   }
@@ -1375,15 +1382,7 @@ function sendRemainingSlots() {
 }
 
 /**
- * sendToSpectators - Send a caption to spectators word-by-word
- *
- * Words are sent progressively over the slot duration to create
- * a smooth display synchronized with speech.
- *
- * FLOW:
- * 1. Split text into words
- * 2. Compute interval between words (slot duration / word count)
- * 3. Send each word with its index for client-side reconstruction
+ * sendToSpectators - Send a caption to spectators as a complete sentence
  *
  * @param {Object} slot - Source slot (contains startTimestamp, slotDuration)
  * @param {string} text - Final text to send (after deduplication)
@@ -1396,48 +1395,23 @@ function sendToSpectators(slot, text) {
   const delayMs = Math.max(0, baseDisplayAtMs - Date.now());
   const videoTimestamp = slot.startTimestamp;
   
-  // Split into words (keep punctuation attached)
-  const words = text.split(/\s+/).filter(w => w.length > 0);
+  if (!text || text.trim().length === 0) return;
   
-  if (words.length === 0) return;
+  log.info('SPECTATOR', `[Slot ${slot.slotIndex}] Envoi dans ${Math.round(delayMs/1000)}s: "${text}"`);
   
-  // Slot duration in ms (use current config)
-  const slotDurationMs = state.fragment.slotDuration * 1000;
-  
-  // Interval between each word
-  const intervalMs = Math.floor(slotDurationMs / words.length);
-  
-  // Unique ID for this caption group (so the client can group words)
-  const captionId = crypto.randomUUID();
-  
-  log.info('SPECTATOR', `[${formatTimestamp(videoTimestamp)}] SEND WORD-BY-WORD: ${words.length} words, interval ${intervalMs}ms`);
-  
-  // Send each word with progressive delay
-  words.forEach((word, index) => {
-    const wordDelayMs = delayMs + (index * intervalMs);
+  // Envoyer la phrase complète après le délai
+  setTimeout(() => {
+    const caption = {
+      id: crypto.randomUUID(),
+      text: text,
+      videoTimestamp,
+      slotIndex: slot.slotIndex,
+      createdAt: Date.now(),
+    };
     
-    setTimeout(() => {
-      const caption = {
-        id: captionId,
-        word: word,
-        wordIndex: index,
-        totalWords: words.length,
-        isLast: index === words.length - 1,
-        videoTimestamp,
-        slotIndex: slot.slotIndex,
-        subtitlerName: slot.subtitlerName,
-        slotDurationMs,
-      };
-      
-      broadcast({ type: 'caption:word', caption }, ws => ws.clientType === 'spectator');
-      
-      if (index === 0) {
-        log.info('SPECTATOR', `  → Premier mot: "${word}"`);
-      } else if (index === words.length - 1) {
-        log.info('SPECTATOR', `  → Dernier mot: "${word}"`);
-      }
-    }, wordDelayMs);
-  });
+    broadcast({ type: 'caption', caption }, ws => ws.clientType === 'spectator');
+    log.info('SPECTATOR', `[Slot ${slot.slotIndex}] ENVOYÉ: "${text}"`);
+  }, delayMs);
 }
 
 /**

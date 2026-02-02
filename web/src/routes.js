@@ -583,7 +583,7 @@ router.get('/api/live/status', (req, res) => {
 
 router.post('/api/live/start', async (req, res) => {
   try {
-    let { source, sessionId, mode = 'fragmentation', delaySec, slotDuration, overlapDuration, notifyBefore, gracePeriodPercent, requiredSubtitlers } = req.body;
+    let { source, sessionId, mode = 'fragmentation', delaySec, slotDuration, overlapDuration, notifyBefore, gracePeriodPercent, nbPools } = req.body;
 
     // Session-based start
     if (sessionId) {
@@ -604,7 +604,7 @@ router.post('/api/live/start', async (req, res) => {
       overlapDuration = cfg.overlapDuration || overlapDuration;
       notifyBefore = cfg.notifyBefore || notifyBefore;
       gracePeriodPercent = cfg.gracePeriodPercent || gracePeriodPercent;
-      requiredSubtitlers = cfg.requiredSubtitlers || requiredSubtitlers;
+      nbPools = cfg.nbPools || nbPools;
 
       state.currentSessionId = sessionId;
     }
@@ -623,9 +623,21 @@ router.post('/api/live/start', async (req, res) => {
     if (typeof overlapDuration === 'number') f.overlapDuration = overlapDuration;
     if (typeof notifyBefore === 'number') f.notifyBefore = notifyBefore;
     if (typeof gracePeriodPercent === 'number') f.gracePeriodPercent = gracePeriodPercent;
-    if (typeof requiredSubtitlers === 'number') f.requiredSubtitlers = requiredSubtitlers;
+    if (typeof nbPools === 'number') f.nbPools = nbPools;
 
-    const validation = services.validateFragmentConfig(f.requiredSubtitlers);
+    // Calcul automatique : requiredSubtitlers = connected / nbPools
+    const subtitlerCount = services.getActiveSubtitlers().length;
+    const computedSubtitlersPerPool = Math.floor(subtitlerCount / f.nbPools);
+    f.requiredSubtitlers = computedSubtitlersPerPool;
+
+    // Validation : au moins 1 sous-titreur par pool
+    if (computedSubtitlersPerPool < 1) {
+      return res.status(400).json({
+        error: `Not enough subtitlers. ${subtitlerCount} connected for ${f.nbPools} pools (minimum ${f.nbPools} required).`
+      });
+    }
+
+    const validation = services.validateFragmentConfig(f.requiredSubtitlers, f.nbPools);
     if (!validation.ok) {
       return res.status(400).json({ error: validation.error });
     }
@@ -636,13 +648,6 @@ router.post('/api/live/start', async (req, res) => {
     }
 
     state.currentMode = mode;
-
-    const subtitlerCount = services.getActiveSubtitlers().length;
-    if (mode === 'fragmentation' && subtitlerCount < f.requiredSubtitlers) {
-      return res.status(400).json({
-        error: `Need ${f.requiredSubtitlers} subtitlers (have ${subtitlerCount})`
-      });
-    }
 
     await services.startLive(mediaPath);
 
@@ -655,7 +660,7 @@ router.post('/api/live/start', async (req, res) => {
       services.startFragmentMode();
     }
 
-    log.info('API', `Live started: ${source}${sessionId ? ` (Session: ${sessionId})` : ''}`);
+    log.info('API', `Live started: ${source}${sessionId ? ` (Session: ${sessionId})` : ''} with ${subtitlerCount} subtitlers in ${f.nbPools} pools (${computedSubtitlersPerPool}/pool)`);
     res.json({ ok: true, mode, sessionId: state.currentSessionId });
   } catch (e) {
     log.error('API', 'Start failed:', e.message);
