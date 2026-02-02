@@ -916,7 +916,18 @@ function detokenize(words) {
     .replace(/([«"']) /g, '$1')         // Remove space after opening punctuation
     .trim();
 }
-
+/**
+ * normalizeForComparison - Prépare un mot pour une comparaison équitable
+ */
+function normalizeForComparison(word) {
+  if (!word) return "";
+  return word
+    .toLowerCase()
+    .normalize("NFD")                 // Sépare les accents
+    .replace(/[\u0300-\u036f]/g, "") // Supprime les accents
+    .trim()
+    .replace(/[.,!?;:]/g, "");       // Enlève la ponctuation collée
+}
 /**
  * wordSimilarity - Compute similarity between two words (0..1)
  *
@@ -1060,6 +1071,122 @@ export function refreshPools() {
     f.pools[index % nb].push(sub); // Répartit : 0, 1, 0...
   });
 }
+// async function processSlotEnd(endedSlotIndexOverride = null) {
+//   const { fragment: f } = state;
+//   const slots = f.captionsBySlot;
+  
+//   if (slots.length === 0) return;
+  
+//   // 1. Identification du slot qui vient de se terminer
+//   const endedSlotIndex = Number.isFinite(endedSlotIndexOverride)
+//     ? endedSlotIndexOverride
+//     : (slots.length - 1);
+//   const endedSlot = slots[endedSlotIndex];
+//   if (!endedSlot) return;
+
+//   log.info('FUSION', `════════════════════════════════════════`);
+//   log.info('FUSION', `DEBUT TRAITEMENT SLOT ${endedSlot.slotIndex}`);
+
+//   // 2. COLLECTE ET CONSENSUS (MSA)
+//   // On récupère les textes de tous les sous-titreurs du pool
+//   const rawContributions = endedSlot.captions
+//     .map(c => c.text)
+//     .filter(t => t && t.trim().length > 0);
+
+//   let consensusText = "";
+//   if (rawContributions.length > 1) {
+//     log.info('FUSION', `${rawContributions.length} contributions reçues. Calcul du MSA...`);
+//     // Appel à votre futur module MSA
+// consensusText = computeMSAConsensus({ captions: rawContributions.map(text => ({ text })) });  
+// } else {
+//     // Fallback si une seule personne a répondu
+//     consensusText = rawContributions[0] || "";
+//   }
+
+//   // 3. REFFINEMENT PAR IA
+//   // On corrige les fautes du consensus avant la fusion
+//   let refinedText = consensusText;
+//   if (consensusText.length > 0) {
+//     try {
+//       log.info('FUSION', `Lancement de la correction IA...`);
+//       refinedText = await runAICorrection(consensusText);
+//     } catch (e) {
+//       log.warn('FUSION', `Echec IA, conservation du texte MSA original`);
+//     }
+//   }
+
+//   // On stocke cette version "propre" pour le calcul d'overlap du prochain slot
+//   endedSlot.textBeforeOverlap = refinedText;
+
+//   // 4. CAS PARTICULIER : SLOT 0 (Envoi immédiat)
+//   if (endedSlotIndex === 0) {
+//     if (refinedText) {
+//       log.info('FUSION', `Premier slot - Envoi immédiat (Consensus + IA)`);
+//       endedSlot.finalText = refinedText;
+//       endedSlot.sent = true;
+//       sendToSpectators(endedSlot, refinedText);
+//       storeFusedCaption(endedSlot, refinedText, null, 0);
+//     } else {
+//       endedSlot.sent = true;
+//       endedSlot.finalText = '';
+//     }
+//     log.info('FUSION', `════════════════════════════════════════`);
+//     return;
+//   }
+
+//   // 5. FUSION AVEC LE SLOT PRÉCÉDENT (Overlap)
+//   const prevSlot = slots[endedSlotIndex - 1];
+//   // On compare le texte raffiné du slot précédent avec le texte raffiné actuel
+//   const prevText = prevSlot.textBeforeOverlap || getSlotRawText(prevSlot);
+
+//   const prevWords = tokenize(prevText);
+//   const currentWords = tokenize(refinedText);
+
+//   // Détection des répétitions entre la FIN de N-1 et le DEBUT de N
+//   if (currentWords.length > 0 && prevWords.length > 0) {
+//     const { overlapLength, overlapWords } = findOverlap(prevWords, currentWords);
+    
+//     if (overlapLength > 0) {
+//       log.info('FUSION', `Overlap détecté: ${overlapLength} mots "${detokenize(overlapWords)}"`);
+//       endedSlot.overlapFromPrev = overlapLength;
+//     } else {
+//       endedSlot.overlapFromPrev = 0;
+//     }
+//   } else {
+//     endedSlot.overlapFromPrev = 0;
+//   }
+
+//   // 6. FINALISATION ET ENVOI DU SLOT PRÉCÉDENT
+//   if (prevSlot.sent) {
+//     log.info('FUSION', `Slot ${prevSlot.slotIndex} déjà envoyé. Overlap calculé pour le suivant.`);
+//     log.info('FUSION', `════════════════════════════════════════`);
+//     return;
+//   }
+
+//   if (!prevText) {
+//     prevSlot.sent = true;
+//     prevSlot.finalText = '';
+//     return;
+//   }
+
+//   // On retire les mots déjà présents dans le slot N-2
+//   let wordsToSend = prevWords;
+//   if (prevSlot.overlapFromPrev && prevSlot.overlapFromPrev > 0) {
+//     wordsToSend = prevWords.slice(prevSlot.overlapFromPrev);
+//   }
+
+//   const finalFusedText = detokenize(wordsToSend);
+//   prevSlot.finalText = finalFusedText;
+//   prevSlot.sent = true;
+
+//   log.info('FUSION', `ENVOI FINAL Slot ${prevSlot.slotIndex}: "${finalFusedText}"`);
+  
+//   // Diffusion mot-à-mot aux spectateurs
+//   sendToSpectators(prevSlot, finalFusedText);
+  
+//   // Archivage
+//   storeFusedCaption(prevSlot, finalFusedText, endedSlot, endedSlot.overlapFromPrev || 0);
+// }
 async function processSlotEnd(endedSlotIndexOverride = null) {
   const { fragment: f } = state;
   const slots = f.captionsBySlot;
@@ -1070,6 +1197,7 @@ async function processSlotEnd(endedSlotIndexOverride = null) {
   const endedSlotIndex = Number.isFinite(endedSlotIndexOverride)
     ? endedSlotIndexOverride
     : (slots.length - 1);
+    
   const endedSlot = slots[endedSlotIndex];
   if (!endedSlot) return;
 
@@ -1077,44 +1205,32 @@ async function processSlotEnd(endedSlotIndexOverride = null) {
   log.info('FUSION', `DEBUT TRAITEMENT SLOT ${endedSlot.slotIndex}`);
 
   // 2. COLLECTE ET CONSENSUS (MSA)
-  // On récupère les textes de tous les sous-titreurs du pool
   const rawContributions = endedSlot.captions
     .map(c => c.text)
     .filter(t => t && t.trim().length > 0);
 
   let consensusText = "";
-  if (rawContributions.length > 1) {
+  if (rawContributions.length > 0) {
     log.info('FUSION', `${rawContributions.length} contributions reçues. Calcul du MSA...`);
-    // Appel à votre futur module MSA
-consensusText = computeMSAConsensus({ captions: rawContributions.map(text => ({ text })) });  
-} else {
-    // Fallback si une seule personne a répondu
-    consensusText = rawContributions[0] || "";
+    // Appel à la nouvelle version robuste du MSA (synchrone)
+    consensusText = computeMSAConsensus({ 
+      captions: rawContributions.map(text => ({ text })) 
+    });
   }
 
-  // 3. REFFINEMENT PAR IA
-  // On corrige les fautes du consensus avant la fusion
-  let refinedText = consensusText;
-  if (consensusText.length > 0) {
-    try {
-      log.info('FUSION', `Lancement de la correction IA...`);
-      refinedText = await runAICorrection(consensusText);
-    } catch (e) {
-      log.warn('FUSION', `Echec IA, conservation du texte MSA original`);
-    }
-  }
-
-  // On stocke cette version "propre" pour le calcul d'overlap du prochain slot
-  endedSlot.textBeforeOverlap = refinedText;
+  // 3. MISE À JOUR DU TEXTE (Anciennement refinedText)
+  const finalProcessedText = consensusText;
+  
+  endedSlot.textBeforeOverlap = finalProcessedText;
 
   // 4. CAS PARTICULIER : SLOT 0 (Envoi immédiat)
   if (endedSlotIndex === 0) {
-    if (refinedText) {
-      log.info('FUSION', `Premier slot - Envoi immédiat (Consensus + IA)`);
-      endedSlot.finalText = refinedText;
+    if (finalProcessedText) {
+      log.info('FUSION', `Premier slot - Envoi immédiat (MSA Pur)`);
+      endedSlot.finalText = finalProcessedText;
       endedSlot.sent = true;
-      sendToSpectators(endedSlot, refinedText);
-      storeFusedCaption(endedSlot, refinedText, null, 0);
+      sendToSpectators(endedSlot, finalProcessedText);
+      storeFusedCaption(endedSlot, finalProcessedText, null, 0);
     } else {
       endedSlot.sent = true;
       endedSlot.finalText = '';
@@ -1125,11 +1241,10 @@ consensusText = computeMSAConsensus({ captions: rawContributions.map(text => ({ 
 
   // 5. FUSION AVEC LE SLOT PRÉCÉDENT (Overlap)
   const prevSlot = slots[endedSlotIndex - 1];
-  // On compare le texte raffiné du slot précédent avec le texte raffiné actuel
-  const prevText = prevSlot.textBeforeOverlap || getSlotRawText(prevSlot);
+  const prevText = prevSlot.textBeforeOverlap || "";
 
   const prevWords = tokenize(prevText);
-  const currentWords = tokenize(refinedText);
+  const currentWords = tokenize(finalProcessedText);
 
   // Détection des répétitions entre la FIN de N-1 et le DEBUT de N
   if (currentWords.length > 0 && prevWords.length > 0) {
@@ -1147,34 +1262,28 @@ consensusText = computeMSAConsensus({ captions: rawContributions.map(text => ({ 
 
   // 6. FINALISATION ET ENVOI DU SLOT PRÉCÉDENT
   if (prevSlot.sent) {
-    log.info('FUSION', `Slot ${prevSlot.slotIndex} déjà envoyé. Overlap calculé pour le suivant.`);
+    log.info('FUSION', `Slot ${prevSlot.slotIndex} déjà envoyé.`);
     log.info('FUSION', `════════════════════════════════════════`);
     return;
   }
 
-  if (!prevText) {
-    prevSlot.sent = true;
-    prevSlot.finalText = '';
-    return;
-  }
-
-  // On retire les mots déjà présents dans le slot N-2
   let wordsToSend = prevWords;
   if (prevSlot.overlapFromPrev && prevSlot.overlapFromPrev > 0) {
     wordsToSend = prevWords.slice(prevSlot.overlapFromPrev);
   }
 
   const finalFusedText = detokenize(wordsToSend);
-  prevSlot.finalText = finalFusedText;
-  prevSlot.sent = true;
-
-  log.info('FUSION', `ENVOI FINAL Slot ${prevSlot.slotIndex}: "${finalFusedText}"`);
   
-  // Diffusion mot-à-mot aux spectateurs
-  sendToSpectators(prevSlot, finalFusedText);
-  
-  // Archivage
-  storeFusedCaption(prevSlot, finalFusedText, endedSlot, endedSlot.overlapFromPrev || 0);
+  if (finalFusedText.trim().length > 0) {
+    prevSlot.finalText = finalFusedText;
+    prevSlot.sent = true;
+    log.info('FUSION', `ENVOI FINAL Slot ${prevSlot.slotIndex}: "${finalFusedText}"`);
+    sendToSpectators(prevSlot, finalFusedText);
+    storeFusedCaption(prevSlot, finalFusedText, endedSlot, endedSlot.overlapFromPrev || 0);
+  } else {
+    prevSlot.sent = true;
+    prevSlot.finalText = '';
+  }
 }
 /**
  * sendRemainingSlots - Send any unsent slots (when stopping fragment mode)
@@ -1323,80 +1432,55 @@ function storeFusedCaption(slot, text, nextSlot, overlapCount) {
     caption: fusedCaption,
     overlapCount: overlapCount || 0,
   });
-  /**
- * runAICorrection - Envoie le texte au serveur LanguageTool (Docker)
- * pour corriger la grammaire et l'orthographe.
- */
- async function runAICorrection(text) {
-  if (!text || text.trim().length === 0) return "";
-  
-  try {
-    const response = await fetch('http://localhost:8010/v2/check', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        text: text,
-        language: 'fr', // Défini en français
-      })
-    });
-
-    const data = await response.json();
-    let correctedText = text;
-
-    // On applique les corrections suggérées par LanguageTool
-    // On part de la fin pour ne pas décaler les index des fautes
-    if (data.matches && data.matches.length > 0) {
-      const matches = data.matches.sort((a, b) => b.offset - a.offset);
-      for (const match of matches) {
-        if (match.replacements && match.replacements.length > 0) {
-          const replacement = match.replacements[0].value;
-          correctedText = correctedText.substring(0, match.offset) + 
-                          replacement + 
-                          correctedText.substring(match.offset + match.length);
-        }
-      }
-    }
-    return correctedText;
-  } catch (e) {
-    console.error("[IA/LanguageTool] Erreur:", e);
-    return text; // Retour au texte MSA si le Docker est injoignable
-  }
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MSA LOGIC (Multi-Source Agreement)
+// ═══════════════════════════════════════════════════════════════════════════════
+
 /**
- * computeMSAConsensus - Calcule le consensus entre les membres du Pool
+ * computeMSAConsensus - Calcule le consensus entre les contributeurs du pool
  */
-function computeMSAConsensus(slot) {
-  if (!slot || !slot.captions || !slot.captions.length) return "";
-  if (slot.captions.length === 1) return slot.captions[0].text;
+export function computeMSAConsensus(slot) {
+  if (!slot || !slot.captions || slot.captions.length === 0) return "";
+  
+  // 1. Filtrer les entrées vides
+  const validCaptions = slot.captions.filter(c => c.text && c.text.trim().length > 0);
+  
+  if (validCaptions.length === 0) return "";
+  if (validCaptions.length === 1) return validCaptions[0].text;
 
-  // On utilise tes fonctions tokenize pour découper proprement
-  const versionsRaw = slot.captions.map(c => tokenize(c.text));
-  const maxLength = Math.max(...versionsRaw.map(v => v.length));
-  const resultTokens = [];
+  // 2. Trier par longueur pour avoir la phrase la plus complète comme pivot
+  const sortedCaptions = [...validCaptions].sort((a, b) => b.text.length - a.text.length);
+  const referenceText = sortedCaptions[0].text;
+  const referenceTokens = tokenize(referenceText);
 
-  for (let i = 0; i < maxLength; i++) {
-    const frequency = {};
-    const originalWords = {};
+  // 3. Vote par token avec fenêtre glissante (anti-décalage)
+  const finalTokens = referenceTokens.map((refWord, i) => {
+    const normRef = normalizeForComparison(refWord);
+    let votes = 1; // Le pivot vote pour lui-même
 
-    versionsRaw.forEach(tokens => {
-      const word = tokens[i];
-      if (word) {
-        // Normalisation uniquement pour le vote (ton idée de normalizeForComparison)
-        const norm = normalizeForComparison(word); 
-        frequency[norm] = (frequency[norm] || 0) + 1;
-        if (!originalWords[norm]) originalWords[norm] = word;
-      }
-    });
-
-    const winnerNorm = Object.keys(frequency).reduce((a, b) => 
-      (frequency[a] || 0) > (frequency[b] || 0) ? a : b, "");
-    
-    if (winnerNorm) {
-      resultTokens.push(originalWords[winnerNorm]); // On garde le mot original "propre"
+    for (let j = 1; j < sortedCaptions.length; j++) {
+      const otherTokens = tokenize(sortedCaptions[j].text);
+      
+      // Fenêtre de recherche (i-1, i, i+1) pour compenser les oublis
+      const window = otherTokens.slice(Math.max(0, i - 1), i + 2);
+      const hasMatch = window.some(word => normalizeForComparison(word) === normRef);
+      
+      if (hasMatch) votes++;
     }
-  }
-  return detokenize(resultTokens);
-}
+
+    // RÈGLE DE DÉCISION :
+    // On garde le mot si votes >= (Total / 2). 
+    // Si c'est un test à 2 personnes (Seuil = 1), la référence gagne toujours.
+    const threshold = sortedCaptions.length / 2;
+    
+    return (votes >= threshold) ? refWord : refWord; // On garde refWord par sécurité
+  });
+
+  // 4. Reconstruction finale
+  return detokenize(finalTokens.filter(t => t !== null));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
