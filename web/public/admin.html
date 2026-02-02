@@ -163,6 +163,50 @@
       color: #000;
     }
     
+    .pool-card {
+      background: #222;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 8px;
+    }
+    .pool-card.active {
+      border-color: #2ecc71;
+      background: rgba(46,204,113,0.05);
+    }
+    .pool-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .pool-title {
+      font-size: 0.85em;
+      font-weight: 600;
+      color: #aaa;
+    }
+    .pool-badge {
+      font-size: 0.7em;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #333;
+      color: #666;
+    }
+    .pool-badge.active {
+      background: #2ecc71;
+      color: #000;
+    }
+    .pool-subtitlers {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .pool-empty {
+      font-size: 0.8em;
+      color: #444;
+      font-style: italic;
+    }
+    
     .turn-display {
       padding: 16px;
       background: #222;
@@ -298,15 +342,7 @@
           <!-- Empty for alignment -->
         </div>
       </div>
-      <div class="form-row">
-  <div class="form-group">
-    <label>Nombre de Pools (Équipes)</label>
-    <input type="number" id="nbPoolsInput" value="1" min="1" max="10" />
-    <small style="color: #555; font-size: 0.8em;">Séparez les sous-titreurs en groupes parallèles.</small>
-  </div>
-</div>
-
-      <div id="restInfo" style="margin-top:4px;color:#666;font-size:0.85em;line-height:1.4;">
+      <div id="restInfo" style="display:none;margin-top:4px;color:#666;font-size:0.85em;line-height:1.4;">
         <div><span style="color:#888;">Repos estimé</span> : <span id="restingTime">-</span></div>
         <div><span style="color:#888;">Cycle</span> : <span id="cycleTime">-</span> <span style="color:#888;">Stride</span> : <span id="strideTime">-</span> <span style="color:#888;">Min sous-titreurs</span> : <span id="minSubtitlers">-</span></div>
       </div>
@@ -320,19 +356,12 @@
     </div>
     
     <div class="card">
-      <div class="card-title">Sous-titreurs (<span id="subtitlerCount">0</span>)</div>
-      <div class="subtitler-list" id="subtitlerList">
-        <span style="color:#444;font-size:0.85em;">Aucun connecté</span>
-      </div>
+      <div class="card-title">Sous-titreurs</div>
       
-      <div id="currentTurnSection" style="display:none;">
-        <div class="turn-display">
-          <div class="name" id="currentTurnName">-</div>
-          <div class="timer" id="currentTurnTimer">00:00</div>
-          <div class="progress">
-            <div class="fill" id="progressFill" style="width:100%;"></div>
-          </div>
-        </div>
+      <div id="poolsContainer" style="margin-bottom:12px;"></div>
+      
+      <div class="subtitler-list" id="subtitlerList" style="display:none;">
+        <span style="color:#444;font-size:0.85em;">Aucun connecté</span>
       </div>
     </div>
     

@@ -333,7 +333,7 @@ export const state = {
   fragment: {
     active: false,
     nbPools: 2,
-    pools: [], // Corrigé : minuscule pour correspondre au reste du code
+    pools: [],
     slotDuration: config.defaultSlotDuration,
     overlapDuration: config.defaultOverlapDuration,
     notifyBefore: config.defaultNotifyBefore,

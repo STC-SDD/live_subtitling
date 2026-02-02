@@ -523,9 +523,41 @@ export function broadcastFragmentStatus() {
   }
 
   // Admin notification (single, consistent broadcast)
+  // Build pools info for admin display
+  // If pools haven't been refreshed yet, generate them on the fly
+  let poolsInfo = [];
+  const nbPools = f.nbPools || 1;
+  
+  if (f.pools && f.pools.length > 0) {
+    poolsInfo = f.pools.map((pool, index) => ({
+      poolIndex: index,
+      subtitlers: pool.map(s => ({ id: s.id, name: s.name })),
+    }));
+  } else if (active.length > 0) {
+    // Generate pools info on-the-fly from active subtitlers
+    const tempPools = Array.from({ length: nbPools }, () => []);
+    active.forEach((sub, index) => {
+      tempPools[index % nbPools].push(sub);
+    });
+    poolsInfo = tempPools.map((pool, index) => ({
+      poolIndex: index,
+      subtitlers: pool.map(s => ({ id: s.id, name: s.name })),
+    }));
+  } else {
+    // No subtitlers - show empty pools
+    poolsInfo = Array.from({ length: nbPools }, (_, index) => ({
+      poolIndex: index,
+      subtitlers: [],
+    }));
+  }
+
   broadcastToAdmins({
     type: 'fragment:admin-status',
     ...status,
+    nbPools: nbPools,
+    pools: poolsInfo,
+    slotDuration: f.slotDuration,
+    gracePeriodPercent: f.gracePeriodPercent,
     openSlotsCount: f.openSlotBySubtitlerId?.size ?? 0,
     rawCaptionsCount: f.captionsBySlot.reduce(
       (n, slot) => n + slot.captions.length,

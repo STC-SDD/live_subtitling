@@ -358,7 +358,6 @@ const state = {
 const el = {};
 
 document.addEventListener('DOMContentLoaded', () => {
-  el.nbPoolsInput = document.getElementById('nbPoolsInput'); // AJOUT
   // Cache elements
   el.liveStatus = document.getElementById('liveStatus');
   el.segmentCount = document.getElementById('segmentCount');
@@ -379,10 +378,6 @@ document.addEventListener('DOMContentLoaded', () => {
   el.controlMessage = document.getElementById('controlMessage');
   el.subtitlerCount = document.getElementById('subtitlerCount');
   el.subtitlerList = document.getElementById('subtitlerList');
-  el.currentTurnSection = document.getElementById('currentTurnSection');
-  el.currentTurnName = document.getElementById('currentTurnName');
-  el.currentTurnTimer = document.getElementById('currentTurnTimer');
-  el.progressFill = document.getElementById('progressFill');
   el.uploadArea = document.getElementById('uploadArea');
   el.fileInput = document.getElementById('fileInput');
   el.uploadMessage = document.getElementById('uploadMessage');
@@ -456,7 +451,6 @@ function initWebSocket() {
 }
 
 function onConnected() {
-  state.ws.identify(STC.CLIENT_TYPES.ADMIN);
   const ADMIN_TOKEN = localStorage.getItem('stc_admin_token');
   if (!ADMIN_TOKEN) {
     location.replace('/admin-login.html');
@@ -518,36 +512,60 @@ function updateLiveUI() {
     el.liveStatus.querySelector('.text').textContent = 'Hors ligne';
     el.startBtn.disabled = false;
     el.stopBtn.disabled = true;
-    el.currentTurnSection.style.display = 'none';
   }
 }
 
 function updateSubtitlers(msg) {
   state.subtitlers = msg.subtitlers || [];
-  const required = msg.requiredSubtitlers || 2;
-  el.subtitlerCount.textContent = `${state.subtitlers.length}/${required}`;
 
   updateRestInfoFromInputs();
 
-  if (state.subtitlers.length === 0) {
-    el.subtitlerList.innerHTML = '<span style="color:#444;font-size:0.85em;">Aucun connecté</span>';
-    el.currentTurnSection.style.display = 'none';
-    return;
+  const nbPools = msg.nbPools || 2;
+
+  // Render pools
+  const poolsContainer = document.getElementById('poolsContainer');
+  const pools = msg.pools || [];
+  const currentSlotIndex = msg.currentSlotIndex || 0;
+  
+  if (pools.length > 0 && state.subtitlers.length > 0) {
+    // Find which pool is currently active (currentSlotIndex % nbPools)
+    const activePoolIndex = currentSlotIndex % nbPools;
+    
+    poolsContainer.innerHTML = pools.map((pool, index) => {
+      const isActivePool = msg.active && index === activePoolIndex;
+      const subtitlerChips = pool.subtitlers.length > 0
+        ? pool.subtitlers.map(s => 
+            `<span class="subtitler-chip ${isActivePool ? 'active' : ''}">${STC.escapeHtml(s.name)}</span>`
+          ).join('')
+        : '<span class="pool-empty">Aucun sous-titreur</span>';
+      
+      return `
+        <div class="pool-card ${isActivePool ? 'active' : ''}">
+          <div class="pool-header">
+            <span class="pool-title">Pool ${index + 1}</span>
+            <span class="pool-badge ${isActivePool ? 'active' : ''}">${isActivePool ? 'En cours' : 'En attente'}</span>
+          </div>
+          <div class="pool-subtitlers">${subtitlerChips}</div>
+        </div>
+      `;
+    }).join('');
+  } else if (state.subtitlers.length === 0) {
+    poolsContainer.innerHTML = '<div style="color:#444;font-size:0.85em;">Aucun sous-titreur connecté</div>';
+  } else {
+    // Fallback: show subtitlers without pools
+    poolsContainer.innerHTML = `
+      <div class="pool-card">
+        <div class="pool-subtitlers">
+          ${state.subtitlers.map(s => 
+            `<span class="subtitler-chip">${STC.escapeHtml(s.name)}</span>`
+          ).join('')}
+        </div>
+      </div>
+    `;
   }
 
-  el.subtitlerList.innerHTML = state.subtitlers.map(s =>
-    `<span class="subtitler-chip ${s.id === msg.currentSubtitlerId ? 'active' : ''}">${STC.escapeHtml(s.name)}</span>`
-  ).join('');
-
-  if (msg.active && msg.currentSubtitlerName) {
-    el.currentTurnSection.style.display = 'block';
-    el.currentTurnName.textContent = msg.currentSubtitlerName + (msg.inGracePeriod ? ' (bonus)' : '');
-    el.currentTurnTimer.textContent = formatTime(msg.secondsRemaining);
-    const totalTime = msg.slotDuration + Math.floor(msg.slotDuration * msg.gracePeriodPercent / 100);
-    el.progressFill.style.width = `${(msg.secondsRemaining / totalTime) * 100}%`;
-    el.progressFill.style.background = msg.inGracePeriod ? '#e67e22' : '#2ecc71';
-  } else {
-    el.currentTurnSection.style.display = 'none';
+  if (state.subtitlers.length === 0) {
+    return;
   }
 }
 
@@ -641,15 +659,6 @@ async function loadVideos() {
 
 // Events
 function setupEvents() {
-  el.nbPoolsInput?.addEventListener('change', () => {
-    const count = parseInt(el.nbPoolsInput.value) || 1;
-    if (state.ws && state.ws.isOpen()) { // Vérifiez la méthode d'ouverture de votre STC.WebSocketManager
-      state.ws.send({
-        type: 'admin:set-pools',
-        nbPools: count
-      });
-    }
-  });
   el.startBtn.addEventListener('click', startLive);
   el.stopBtn.addEventListener('click', stopLive);
 
@@ -681,7 +690,6 @@ function setupEvents() {
 async function startLive() {
   const video = el.videoSelect.value;
   const requiredSubtitlers = parseInt(el.requiredSubtitlers.value) || 2;
-  const nbPools = parseInt(el.nbPoolsInput.value) || 1; // Récupération du nombre de pools
 
   // --- Préparation de l'objet de configuration commun ---
   const liveConfig = {
@@ -691,7 +699,6 @@ async function startLive() {
     overlapDuration: parseInt(el.overlapDuration.value) || 5,
     gracePeriodPercent: parseInt(el.gracePeriod.value) || 20,
     requiredSubtitlers: requiredSubtitlers,
-    nbPools: nbPools, // Ajout du paramètre pour le Back
     notifyBefore: 5,
   };
 

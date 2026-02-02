@@ -339,9 +339,9 @@ export function createWebSocketServer(server) {
   });
 
   setInterval(() => {
-    if (state.fragment.active) {
-      services.broadcastFragmentStatus();
-    }
+    // Always broadcast status so admins see connected subtitlers
+    // even before live starts
+    services.broadcastFragmentStatus();
   }, 1000);
 
   log.info('WS', 'WebSocket server ready');
@@ -368,6 +368,8 @@ function handleMessage(ws, data) {
           state.fragment.nbPools = count;
           log.info('ADMIN', `Nombre de pools mis à jour à : ${count}`);
           
+          // Redistribute subtitlers into the new number of pools
+          services.refreshPools();
           // On renvoie le statut mis à jour à tout le monde
           services.broadcastFragmentStatus();
         }
@@ -399,6 +401,11 @@ function handleIdentify(ws, msg) {
   if (clientType !== 'subtitler') {
     ws.clientType = clientType;
     log.info('WS', `Identified: ${clientType}`);
+    
+    // Send current fragment status immediately to admin
+    if (clientType === 'admin') {
+      services.broadcastFragmentStatus();
+    }
     return;
   }
 
@@ -493,6 +500,7 @@ function handleFragmentJoin(ws, msg) {
 
   const mode = ws.sessionId ? `Session: ${ws.sessionId}` : 'Free mode';
   log.info('FRAGMENT', `Subtitler joined: ${name} (${mode})`);
+  services.refreshPools();
   services.broadcastFragmentStatus();
 
   const activeCount = services.getActiveSubtitlers().length;
@@ -506,6 +514,7 @@ function handleFragmentLeave(ws) {
     const name = state.fragment.subtitlers.get(ws.odId).name;
     state.fragment.subtitlers.delete(ws.odId);
     log.info('FRAGMENT', `Subtitler left: ${name}`);
+    services.refreshPools();
     services.broadcastFragmentStatus();
   }
 }
