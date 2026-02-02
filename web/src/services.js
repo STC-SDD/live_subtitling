@@ -417,21 +417,28 @@ export function getNextSubtitler() {
 // }
 function getNextPoolSlotInfo(targetPoolIndex) {
   const { fragment: f } = state;
+  
+  // 1. SÉCURITÉ : Si l'utilisateur n'a pas de pool, on s'arrête direct
+  if (targetPoolIndex === undefined || targetPoolIndex === -1) {
+    return { slotIndex: f.currentSlotIndex, startMs: Date.now() };
+  }
+
   const nb = Math.max(1, parseInt(f.nbPools) || 1);
   const strideMs = getFragmentStrideSeconds() * 1000;
   const now = Date.now();
 
-  // On cherche le prochain slotIndex qui correspond à ce pool
+  // 2. CALCUL DIRECT (Pas de boucle while)
+  // On calcule l'écart nécessaire pour atteindre le prochain modulo
   let nextSlotIndex = f.currentSlotIndex;
-  while (nextSlotIndex % nb !== targetPoolIndex) {
-    nextSlotIndex++;
-  }
+  const currentMod = nextSlotIndex % nb;
+  const diff = (targetPoolIndex - currentMod + nb) % nb;
+  nextSlotIndex += diff;
 
-  // Calcul du temps de départ basé sur le dernier slot créé
+  // 3. Calcul du temps
   const latestSlot = f.captionsBySlot[f.captionsBySlot.length - 1];
   const baseTime = latestSlot ? latestSlot.startTime : now;
-  
   const offset = nextSlotIndex - (latestSlot ? latestSlot.slotIndex : 0);
+  
   const startMs = baseTime + (offset * strideMs);
 
   return { slotIndex: nextSlotIndex, startMs };

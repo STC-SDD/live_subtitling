@@ -356,28 +356,75 @@ export const isLiveRunning = () => state.ffmpegProc !== null;
 export const getLiveTimestamp = () =>
   state.liveStartedAt ? Date.now() - state.liveStartedAt : null;
 
+// export function resetFragment() {
+//   const f = state.fragment;
+
+//   // 1. ARRÊT PHYSIQUE DE TOUS LES TIMERS INDIVIDUELS
+//   if (f.slotTimer) clearTimeout(f.slotTimer);
+//   if (f.notifyTimer) clearTimeout(f.notifyTimer);
+//   if (f.graceTimer) clearTimeout(f.graceTimer);
+//   if (f.schedulerTimer) clearInterval(f.schedulerTimer);
+
+//   // 2. VIDAGE DU SET DE TIMERS (Crucial pour les pools)
+//   if (f.slotTimers && f.slotTimers.size > 0) {
+//     for (const t of f.slotTimers) {
+//       clearTimeout(t);
+//     }
+//     f.slotTimers.clear(); // On vide le Set existant
+//   }
+
+//   const prevGrace = f.gracePeriodPercent;
+//   const prevRequired = f.requiredSubtitlers;
+//   const prevNbPools = f.nbPools; // N'oublie pas de garder nbPools !
+
+//   // 3. RÉINITIALISATION COMPLÈTE
+//   state.fragment = {
+//     active: false,
+//     slotDuration: config.defaultSlotDuration,
+//     overlapDuration: config.defaultOverlapDuration,
+//     notifyBefore: config.defaultNotifyBefore,
+//     gracePeriodPercent: prevGrace || 20,
+//     requiredSubtitlers: prevRequired || 2,
+//     nbPools: prevNbPools || 1, // Important pour tes tests
+//     subtitlers: new Map(),
+//     currentSlotIndex: 0,
+//     slotStartTime: null,
+//     slotTimer: null,
+//     notifyTimer: null,
+//     graceTimer: null,
+//     schedulerTimer: null,
+//     slotTimers: new Set(),
+//     openSlotBySubtitlerId: new Map(),
+//     captionsBySlot: [],
+//     fusedCaptions: [],
+//   };
+
+//   log.info('FRAGMENT', 'État réinitialisé et timers nettoyés.');
+// }
 export function resetFragment() {
   const f = state.fragment;
 
-  // 1. ARRÊT PHYSIQUE DE TOUS LES TIMERS INDIVIDUELS
+  // 1. ARRÊT DES TIMERS (C'est parfait, ne change rien ici)
   if (f.slotTimer) clearTimeout(f.slotTimer);
   if (f.notifyTimer) clearTimeout(f.notifyTimer);
   if (f.graceTimer) clearTimeout(f.graceTimer);
   if (f.schedulerTimer) clearInterval(f.schedulerTimer);
 
-  // 2. VIDAGE DU SET DE TIMERS (Crucial pour les pools)
   if (f.slotTimers && f.slotTimers.size > 0) {
     for (const t of f.slotTimers) {
       clearTimeout(t);
     }
-    f.slotTimers.clear(); // On vide le Set existant
+    f.slotTimers.clear();
   }
 
+  // 2. SAUVEGARDE DES DONNÉES DE SESSION (Crucial)
   const prevGrace = f.gracePeriodPercent;
   const prevRequired = f.requiredSubtitlers;
-  const prevNbPools = f.nbPools; // N'oublie pas de garder nbPools !
+  const prevNbPools = f.nbPools;
+  // ON SAUVEGARDE LA LISTE DES GENS CONNECTÉS
+  const activeSubtitlers = f.subtitlers; 
 
-  // 3. RÉINITIALISATION COMPLÈTE
+  // 3. RÉINITIALISATION SÉLECTIVE
   state.fragment = {
     active: false,
     slotDuration: config.defaultSlotDuration,
@@ -385,8 +432,11 @@ export function resetFragment() {
     notifyBefore: config.defaultNotifyBefore,
     gracePeriodPercent: prevGrace || 20,
     requiredSubtitlers: prevRequired || 2,
-    nbPools: prevNbPools || 1, // Important pour tes tests
-    subtitlers: new Map(),
+    nbPools: prevNbPools || 1,
+    
+    // MODIF ICI : On remet les anciens utilisateurs au lieu d'une Map vide
+    subtitlers: activeSubtitlers, 
+    
     currentSlotIndex: 0,
     slotStartTime: null,
     slotTimer: null,
@@ -397,9 +447,10 @@ export function resetFragment() {
     openSlotBySubtitlerId: new Map(),
     captionsBySlot: [],
     fusedCaptions: [],
+    pools: [], // On vide les pools pour qu'ils se régénèrent proprement
   };
 
-  log.info('FRAGMENT', 'État réinitialisé et timers nettoyés.');
+  log.info('FRAGMENT', 'État réinitialisé, timers stoppés, SESSIONS CONSERVÉES.');
 }
 export function clearTimers() {
   if (state.fragment.slotTimer) {
